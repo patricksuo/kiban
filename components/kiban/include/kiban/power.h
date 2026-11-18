@@ -1,5 +1,7 @@
-// Sleep and wake. ESP32 deep sleep does NOT power the board down: the main and panel/SD rails,
-// the modem and the BT audio module stay powered [community] FreeInk metalio-eink4-support.md:117-121.
+// Sleep, wake and power-off. ESP32 deep sleep does NOT power the board down: the main and panel/SD
+// rails, the modem and the BT audio module stay powered [community] FreeInk metalio-eink4-support.md:117-121.
+// kiban_power_off() cuts power within ~2 s even with USB attached, and the PCF8563 INT line can power
+// the board back on (kiban_rtc_timer_irq() before power-off) [measured] research/003 P7.
 #pragma once
 
 #include <stdbool.h>

@@ -231,3 +231,20 @@ version cannot be read over UART; the only known command set is the vendor's (`A
 | Deep sleep, timer 5000 ms | Woke by timer; 5664 ms measured from sleep entry to the probe's report (includes ~0.66 s of boot). TCA9555 state retained across deep sleep |
 | PCF8563 countdown interrupt (TIE, 5 s) | No lasting change on GPIO1 (touch INT), GPIO2 (expander INT), GPIO3 (POWER) or any TCA9555 input when the timer expired. The RTC INT line is not routed to these; whether it reaches the power-switch chip (power-on alarm) is open `[to-verify]` |
 | TCA9555 P1.2 (unmapped in vendor code) | Toggles irregularly (bursts of ~20–100 ms, roughly every second) independent of the RTC timer; each change pulses the expander INT (GPIO2). Source unknown `[to-verify]` |
+
+## P7 · Wake by POWER, hardware power-off, RTC power-on
+
+| Item | Result |
+|---|---|
+| Light sleep, POWER key wake (GPIO3 low level) | Woke on a short press after 14.5 s; cause GPIO |
+| Deep sleep, POWER key wake (EXT1 any-low on GPIO3) | Woke on a short press after 17.2 s; cause EXT1 |
+| Hardware power-off (`kiban_power_off`: P1.3 toggled every 100 ms) **with USB attached** | Power was cut: USB disappeared within ~2 s of the first pulse (20:33:21 → 20:33:23); the next boot was a power-on reset. This contradicts the FreeInk note that USB keeps the board powered `[measured]`, this unit, twice |
+| Power-on after hardware power-off | A short POWER press does nothing; a ~3 s press boots |
+| **RTC power-on** | PCF8563 countdown armed for 60 s, then hardware power-off with USB attached: the board powered itself on 59–60 s later (USB re-enumerated at 20:34:20, power-on reset, no key pressed). **The RTC INT line reaches the power-switch chip: scheduled wake from true power-off works** |
+
+Consequences `[inference]`:
+- A real "off" with a scheduled wake is available (RTC alarm/timer + power-off), instead of keeping the board in deep sleep
+  with all rails powered.
+- The vendor issue #4 log (pulses started, firmware still alive ~2 s later) is not explained by "USB prevents power-off"
+  alone on this unit; the zombie state is still best explained by the vendor's unbounded `PwrOffTask` and its
+  side effects, but the exact power-switch behaviour in that state is open.
