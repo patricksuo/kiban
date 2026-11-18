@@ -36,6 +36,8 @@ esp_err_t kiban_gauge_read(kiban_gauge_t *out);
 // Program the gauge's Design Capacity and Learned FCC (data memory; persists while the cell is
 // connected). Only changes the TI default 3000 mAh unless force. Blocking, ~7 s.
 esp_err_t kiban_gauge_set_design_capacity(uint16_t mah, bool force);
+// Diagnostic only: try the TI default unseal keys; SEC 3 = sealed, 2 = unsealed, 1 = full access.
+esp_err_t kiban_gauge_unseal_test(uint32_t gap_ms, uint8_t *sec_before, uint8_t *sec_after);
 
 typedef struct {
     uint8_t regs[0x40];         // raw dump 0x00..0x3F

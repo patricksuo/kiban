@@ -216,6 +216,8 @@ static esp_err_t dm_write_word(uint16_t address, uint16_t value)
     ESP_RETURN_ON_ERROR(g16(G_MAC_DATA, &old), TAG, "read word");
     ESP_RETURN_ON_ERROR(g16(G_MAC_SUM, &sum), TAG, "read sum");
     const uint16_t be = (uint16_t)((value >> 8) | (value << 8));
+    ESP_LOGI(TAG, "DM 0x%04x: old word 0x%04x (= %u), sum reg 0x%04x, new %u", address, old,
+             (unsigned)(uint16_t)((old >> 8) | (old << 8)), sum, value);
     if (old == be) return ESP_OK;
     sum = (uint16_t)((sum & 0xFF00) | (uint8_t)(sum + (old & 0xFF) + (old >> 8) - (value & 0xFF) - (value >> 8)));
     ESP_RETURN_ON_ERROR(gw16(G_MAC_CONTROL, address), TAG, "reselect");   // reading the sum may advance the block
@@ -238,12 +240,15 @@ esp_err_t kiban_gauge_set_design_capacity(uint16_t mah, bool force)
         ESP_RETURN_ON_ERROR(gw16(G_CONTROL, unlock[i]), TAG, "unlock");
         vTaskDelay(pdMS_TO_TICKS(1500));   // some BQ27220s ignore keys sent back to back
     }
+    g16(G_OPSTATUS, &st);
+    ESP_LOGI(TAG, "after keys: OperationStatus 0x%04x (SEC=%u)", st, (st >> 1) & 3);
     ESP_RETURN_ON_ERROR(gw16(G_CONTROL, 0x0090), TAG, "enter cfg update");
     bool in_cfg = false;
     for (int i = 0; i < 10 && !in_cfg; i++) {
         vTaskDelay(pdMS_TO_TICKS(500));
         in_cfg = g16(G_OPSTATUS, &st) == ESP_OK && (st & 0x0400);
     }
+    ESP_LOGI(TAG, "cfg update %s (OperationStatus 0x%04x)", in_cfg ? "entered" : "NOT entered", st);
     esp_err_t err = in_cfg ? ESP_OK : ESP_ERR_TIMEOUT;
     if (err == ESP_OK) err = dm_write_word(DM_LEARNED_FCC, mah);
     if (err == ESP_OK) { vTaskDelay(pdMS_TO_TICKS(500)); err = dm_write_word(DM_DESIGN_CAP, mah); }
@@ -256,4 +261,20 @@ esp_err_t kiban_gauge_set_design_capacity(uint16_t mah, bool force)
     ESP_LOGI(TAG, "design capacity %u -> %u mAh (%s)", dc, after, esp_err_to_name(err));
     if (err == ESP_OK && after != mah) err = ESP_ERR_INVALID_RESPONSE;
     return err;
+}
+
+// Diagnostic: send the TI default unseal keys with a given gap, report the security mode, re-seal.
+esp_err_t kiban_gauge_unseal_test(uint32_t gap_ms, uint8_t *sec_before, uint8_t *sec_after)
+{
+    uint16_t st = 0;
+    ESP_RETURN_ON_ERROR(g16(G_OPSTATUS, &st), TAG, "status");
+    if (sec_before) *sec_before = (st >> 1) & 3;
+    gw16(G_CONTROL, 0x0414);
+    vTaskDelay(pdMS_TO_TICKS(gap_ms ? gap_ms : 1));
+    gw16(G_CONTROL, 0x3672);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    ESP_RETURN_ON_ERROR(g16(G_OPSTATUS, &st), TAG, "status");
+    if (sec_after) *sec_after = (st >> 1) & 3;
+    gw16(G_CONTROL, 0x0030);   // seal again
+    return ESP_OK;
 }

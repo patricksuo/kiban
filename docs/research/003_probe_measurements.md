@@ -248,3 +248,13 @@ Consequences `[inference]`:
 - The vendor issue #4 log (pulses started, firmware still alive ~2 s later) is not explained by "USB prevents power-off"
   alone on this unit; the zombie state is still best explained by the vendor's unbounded `PwrOffTask` and its
   side effects, but the exact power-switch behaviour in that state is open.
+
+## Battery gauge configuration
+
+- Goal: replace the BQ27220's default 3000 mAh design capacity with the cell's ~1000 mAh (FreeInk's procedure).
+- The TI default unseal keys (`0x0414`, `0x3672`) do **not** unseal this gauge: OperationStatus SEC stays 3 (sealed)
+  with key gaps of 1 ms, 10 ms and 1500 ms. Data-memory writes are therefore ignored (Design Capacity reads 3000 after
+  the procedure). The vendor most likely set custom keys `[inference]`; no further key guessing.
+- Consequence: the gauge's SOC / remaining / full capacity remain based on 3000 mAh and are not usable. Voltage,
+  current and temperature readings do not depend on that configuration. kiban computes its own state of charge
+  from them (see `battery_soc`).

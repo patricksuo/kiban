@@ -12,6 +12,12 @@
 static int cmd_bat(int argc, char **argv)
 {
     kiban_gauge_t g;
+    if (argc >= 3 && !strcmp(argv[1], "unseal")) {
+        uint8_t a = 0, b = 0;
+        esp_err_t e = kiban_gauge_unseal_test((uint32_t)atoi(argv[2]), &a, &b);
+        printf("unseal test gap %s ms: %s, SEC %u -> %u (3 sealed, 2 unsealed, 1 full)\n", argv[2], esp_err_to_name(e), a, b);
+        return 0;
+    }
     if (argc >= 3 && !strcmp(argv[1], "capacity")) {
         esp_err_t e = kiban_gauge_set_design_capacity((uint16_t)atoi(argv[2]), argc > 3 && !strcmp(argv[3], "force"));
         printf("set design capacity: %s\n", esp_err_to_name(e));
