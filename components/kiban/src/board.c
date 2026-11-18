@@ -9,10 +9,13 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "kiban/ioexp.h"
-#include "kiban/sensors.h"
+#include "kiban/charger.h"
+#include "freertos/FreeRTOS.h"
 
 static const char *TAG = "kiban.board";
 static i2c_master_bus_handle_t s_bus;
+static uint32_t s_i2c_hz = 400000;
+static bool s_charger_ok;
 
 #define PIN_BIT(n) ((uint16_t)1u << (n))
 
@@ -22,6 +25,8 @@ static const uint16_t OUTPUTS = PIN_BIT(KIBAN_IOEXP_USB_MUX_SEL) | PIN_BIT(KIBAN
                                 PIN_BIT(KIBAN_IOEXP_PWR_KEY_PULSE);
 
 i2c_master_bus_handle_t kiban_board_i2c(void) { return s_bus; }
+uint32_t kiban_board_i2c_hz(void) { return s_i2c_hz; }
+bool kiban_board_charger_ok(void) { return s_charger_ok; }
 
 esp_err_t kiban_board_rail_set(kiban_rail_t rail, bool on)
 {
@@ -51,6 +56,7 @@ esp_err_t kiban_board_init(const kiban_board_cfg_t *cfg)
             .glitch_ignore_cnt = 7,
             .flags.enable_internal_pullup = true,
         };
+        s_i2c_hz = cfg->i2c_hz ? cfg->i2c_hz : 400000;
         ESP_RETURN_ON_ERROR(i2c_new_master_bus(&bus_cfg, &s_bus), TAG, "i2c bus");
     }
     ESP_RETURN_ON_ERROR(kiban_ioexp_init(s_bus, cfg->expander_wait_ms), TAG, "expander");
@@ -80,14 +86,24 @@ esp_err_t kiban_board_init(const kiban_board_cfg_t *cfg)
                                 .pull_up_en = GPIO_PULLUP_ENABLE};
     ESP_RETURN_ON_ERROR(gpio_config(&intr), TAG, "ioexp int");
 
-    // Charging safety: enforce the termination voltage on every boot (another firmware or a charger
-    // reset may have left a higher value).
-    // Not fatal: the rest of the board is usable, but say so loudly. [measured] 2026-11-18: writes to
-    // 0x04/0x05 are ignored on this device, even after the vendor unlock; VREG stays 4400 mV.
-    if (cfg->charge_vreg_mv) {
-        esp_err_t verr = kiban_charger_set_vreg_mv(cfg->charge_vreg_mv);
-        if (verr != ESP_OK) ESP_LOGE(TAG, "charger VREG NOT enforced (%s); charging still uses the previous VREG",
-                                     esp_err_to_name(verr));
+    // Charging safety: apply the charge policy on every boot (another firmware or a charger reset may
+    // have left other values). Fail closed: if it cannot be applied, charging stays disabled.
+    if (!cfg->leave_charger) {
+        kiban_charge_policy_t p = cfg->charge;
+        const kiban_charge_policy_t d = KIBAN_CHARGE_POLICY_DEFAULT();
+        if (!p.vreg_mv && !p.ichg_ma) p = d;   // cfg built without a policy: full default, incl. EN_TERM
+        if (!p.vreg_mv) p.vreg_mv = d.vreg_mv;
+        if (!p.ichg_ma) p.ichg_ma = d.ichg_ma;
+        esp_err_t cerr = ESP_FAIL;
+        for (int i = 0; i < 3 && cerr != ESP_OK; i++) {
+            if (i) vTaskDelay(pdMS_TO_TICKS(50));
+            cerr = kiban_charger_apply(&p);
+        }
+        s_charger_ok = cerr == ESP_OK;
+        if (!s_charger_ok) {
+            kiban_charger_set_enabled(false);
+            ESP_LOGE(TAG, "charge policy NOT applied (%s): charging disabled", esp_err_to_name(cerr));
+        }
     }
 
     ESP_LOGI(TAG, "board up");

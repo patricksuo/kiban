@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "driver/i2c_master.h"
 #include "esp_err.h"
+#include "kiban/charger.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,11 +29,11 @@ typedef enum {
 typedef struct {
     uint32_t i2c_hz;           // default 400 kHz
     uint32_t expander_wait_ms; // how long to retry the expander at boot; default 3000
-    uint32_t charge_vreg_mv;   // charger termination voltage enforced at init; capped at
-                               // KIBAN_CHARGER_VREG_CAP_MV (4200). 0 = leave the charger untouched
+    kiban_charge_policy_t charge;   // applied at init; zero fields take the defaults (4200 mV, 480 mA, EN_TERM)
+    bool leave_charger;             // true: do not touch the charger at all (diagnostics only)
 } kiban_board_cfg_t;
 
-#define KIBAN_BOARD_CFG_DEFAULT() { .i2c_hz = 400000, .expander_wait_ms = 3000, .charge_vreg_mv = 4200 }
+#define KIBAN_BOARD_CFG_DEFAULT() { .i2c_hz = 400000, .expander_wait_ms = 3000, .charge = KIBAN_CHARGE_POLICY_DEFAULT() }
 
 // Bring-up, in this order:
 //  1. I2C master bus on SDA41/SCL42.
@@ -41,11 +42,14 @@ typedef struct {
 //     touch held in reset.
 //  3. Panel/SD rail ON, 10 ms, release touch reset, 120 ms settle.
 //  4. Motor GPIO low.
-//  5. Charger VREG set to cfg->charge_vreg_mv (default 4200 mV) and verified.
+//  5. Charge policy applied and verified (3 attempts); if it cannot be applied, charging is left
+//     disabled (fail closed) and kiban_board_charger_ok() returns false. init still returns ESP_OK.
 // Mirrors the vendor boot levels; no power-off pulses.
 esp_err_t kiban_board_init(const kiban_board_cfg_t *cfg);
 
 i2c_master_bus_handle_t kiban_board_i2c(void);
+uint32_t kiban_board_i2c_hz(void);
+bool kiban_board_charger_ok(void);
 esp_err_t kiban_board_rail_set(kiban_rail_t rail, bool on);
 
 #ifdef __cplusplus

@@ -1,67 +1,41 @@
-// Gauge / charger / RTC / accelerometer read paths.
+// Gauge / RTC / accelerometer read paths.
 // Register maps follow the vendor firmware (MIT, CloudZao/Metalio-E-INK4 @d12f481):
-// main/boards/common/power/cx25601n.cc, main/boards/common/power/bq27220_gauge.cc,
-// main/boards/common/sensor/sc7a20h.cc; BQ27220 standard commands per the TI datasheet;
-// PCF8563 per the NXP datasheet.
+// main/boards/common/power/bq27220_gauge.cc, main/boards/common/sensor/sc7a20h.cc; BQ27220 standard
+// commands per the TI datasheet; PCF8563 per the NXP datasheet.
 #include "kiban/sensors.h"
 
-#include "driver/i2c_master.h"
 #include "esp_check.h"
-#include "esp_log.h"
-#include "kiban/board.h"
+#include "i2c_dev.h"
 
 static const char *TAG = "kiban.sensors";
-#define XFER_TIMEOUT_MS 50
-
-static i2c_master_dev_handle_t dev_for(uint8_t addr)
-{
-    static struct { uint8_t addr; i2c_master_dev_handle_t h; } cache[4];
-    for (int i = 0; i < 4; i++)
-        if (cache[i].h && cache[i].addr == addr) return cache[i].h;
-    i2c_master_bus_handle_t bus = kiban_board_i2c();
-    if (!bus) return NULL;
-    for (int i = 0; i < 4; i++) {
-        if (cache[i].h) continue;
-        const i2c_device_config_t cfg = {.dev_addr_length = I2C_ADDR_BIT_LEN_7, .device_address = addr,
-                                         .scl_speed_hz = 400000};
-        if (i2c_master_bus_add_device(bus, &cfg, &cache[i].h) != ESP_OK) return NULL;
-        cache[i].addr = addr;
-        return cache[i].h;
-    }
-    return NULL;
-}
-
-static esp_err_t rd(uint8_t addr, uint8_t reg, uint8_t *buf, size_t n)
-{
-    i2c_master_dev_handle_t h = dev_for(addr);
-    ESP_RETURN_ON_FALSE(h, ESP_ERR_INVALID_STATE, TAG, "no device 0x%02x", addr);
-    return i2c_master_transmit_receive(h, &reg, 1, buf, n, XFER_TIMEOUT_MS);
-}
-
-static esp_err_t wr(uint8_t addr, uint8_t reg, uint8_t val)
-{
-    i2c_master_dev_handle_t h = dev_for(addr);
-    ESP_RETURN_ON_FALSE(h, ESP_ERR_INVALID_STATE, TAG, "no device 0x%02x", addr);
-    const uint8_t b[2] = {reg, val};
-    return i2c_master_transmit(h, b, 2, XFER_TIMEOUT_MS);
-}
 
 // ---- BQ27220 -------------------------------------------------------------------------------
 static esp_err_t g16(uint8_t cmd, uint16_t *v)
 {
     uint8_t b[2];
-    ESP_RETURN_ON_ERROR(rd(KIBAN_GAUGE_ADDR, cmd, b, 2), TAG, "gauge 0x%02x", cmd);
+    ESP_RETURN_ON_ERROR(kiban_i2c_rd(KIBAN_GAUGE_ADDR, cmd, b, 2), TAG, "gauge 0x%02x", cmd);
     *v = (uint16_t)(b[0] | (b[1] << 8));
     return ESP_OK;
 }
 
-esp_err_t kiban_gauge_read(kiban_gauge_t *o)
+esp_err_t kiban_gauge_read_basic(kiban_gauge_basic_t *o)
 {
     uint16_t v;
     ESP_RETURN_ON_ERROR(g16(0x08, &o->voltage_mv), TAG, "voltage");
     ESP_RETURN_ON_ERROR(g16(0x0C, &v), TAG, "current"); o->current_ma = (int16_t)v;
     ESP_RETURN_ON_ERROR(g16(0x14, &v), TAG, "avg current"); o->avg_current_ma = (int16_t)v;
     ESP_RETURN_ON_ERROR(g16(0x06, &v), TAG, "temp"); o->temp_c_x10 = (int16_t)((int)v - 2731);
+    return ESP_OK;
+}
+
+esp_err_t kiban_gauge_read(kiban_gauge_t *o)
+{
+    kiban_gauge_basic_t b;
+    ESP_RETURN_ON_ERROR(kiban_gauge_read_basic(&b), TAG, "basic");
+    o->voltage_mv = b.voltage_mv;
+    o->current_ma = b.current_ma;
+    o->avg_current_ma = b.avg_current_ma;
+    o->temp_c_x10 = b.temp_c_x10;
     ESP_RETURN_ON_ERROR(g16(0x2C, &o->soc_pct), TAG, "soc");
     ESP_RETURN_ON_ERROR(g16(0x10, &o->remaining_mah), TAG, "rm");
     ESP_RETURN_ON_ERROR(g16(0x12, &o->full_mah), TAG, "fcc");
@@ -75,26 +49,13 @@ esp_err_t kiban_gauge_read(kiban_gauge_t *o)
     return ESP_OK;
 }
 
-// ---- CX25601N (read-only) ------------------------------------------------------------------
-esp_err_t kiban_charger_read(kiban_charger_t *o)
-{
-    for (int r = 0; r < 0x40; r += 8) ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, (uint8_t)r, &o->regs[r], 8), TAG, "chg");
-    const uint8_t *R = o->regs;
-    o->vreg_mv = (uint32_t)(((R[0x04] >> 3) & 0x1F) | ((R[0x05] & 0x0F) << 5)) * 10;     // cx25601n.cc:106-108
-    o->ichg_ma = (uint32_t)(((R[0x02] >> 6) & 0x03) | ((R[0x03] & 0x0F) << 2)) * 80;     // cx25601n.cc:645-647
-    o->iindpm_ma = (uint32_t)(((R[0x06] >> 4) & 0x0F) | ((R[0x07] & 0x0F) << 4)) * 20;   // cx25601n.cc IINDPM
-    o->vbus_stat = R[0x1E] & 0x07;                                                       // cx25601n.cc:741
-    o->chrg_stat = (R[0x1E] >> 3) & 0x03;                                                // cx25601n.cc:730
-    return ESP_OK;
-}
-
 // ---- PCF8563 -------------------------------------------------------------------------------
 static int bcd(uint8_t v) { return (v >> 4) * 10 + (v & 0x0F); }
 
 esp_err_t kiban_rtc_get(kiban_rtc_time_t *o)
 {
     uint8_t b[7];
-    ESP_RETURN_ON_ERROR(rd(KIBAN_RTC_ADDR, 0x02, b, 7), TAG, "rtc");
+    ESP_RETURN_ON_ERROR(kiban_i2c_rd(KIBAN_RTC_ADDR, 0x02, b, 7), TAG, "rtc");
     o->integrity_lost = b[0] & 0x80;
     o->second = bcd(b[0] & 0x7F);
     o->minute = bcd(b[1] & 0x7F);
@@ -106,176 +67,43 @@ esp_err_t kiban_rtc_get(kiban_rtc_time_t *o)
     return ESP_OK;
 }
 
+// PCF8563: 0x01 Control_status_2 TIE=bit0 TF=bit2, 0x0E Timer_control TE=bit7 TD[1:0]=10 (1 Hz),
+// 0x0F Timer value. INT is open-drain, active low.
+esp_err_t kiban_rtc_timer_irq(uint8_t seconds)
+{
+    uint8_t c2;
+    ESP_RETURN_ON_ERROR(kiban_i2c_wr(KIBAN_RTC_ADDR, 0x0E, 0x00), TAG, "timer off");
+    ESP_RETURN_ON_ERROR(kiban_i2c_rd(KIBAN_RTC_ADDR, 0x01, &c2, 1), TAG, "ctrl2");
+    ESP_RETURN_ON_ERROR(kiban_i2c_wr(KIBAN_RTC_ADDR, 0x01, (uint8_t)((c2 & ~0x1C) | 0x01)), TAG, "TIE");
+    ESP_RETURN_ON_ERROR(kiban_i2c_wr(KIBAN_RTC_ADDR, 0x0F, seconds), TAG, "timer value");
+    return kiban_i2c_wr(KIBAN_RTC_ADDR, 0x0E, 0x82);
+}
+
+esp_err_t kiban_rtc_timer_off(void)
+{
+    uint8_t c2;
+    ESP_RETURN_ON_ERROR(kiban_i2c_wr(KIBAN_RTC_ADDR, 0x0E, 0x00), TAG, "timer off");
+    ESP_RETURN_ON_ERROR(kiban_i2c_rd(KIBAN_RTC_ADDR, 0x01, &c2, 1), TAG, "ctrl2");
+    return kiban_i2c_wr(KIBAN_RTC_ADDR, 0x01, (uint8_t)(c2 & ~0x1D));
+}
+
 // ---- SC7A20H -------------------------------------------------------------------------------
 esp_err_t kiban_imu_init(uint8_t *who)
 {
     uint8_t id = 0;
-    ESP_RETURN_ON_ERROR(rd(KIBAN_IMU_ADDR, 0x0F, &id, 1), TAG, "who_am_i");
+    ESP_RETURN_ON_ERROR(kiban_i2c_rd(KIBAN_IMU_ADDR, 0x0F, &id, 1), TAG, "who_am_i");
     if (who) *who = id;
-    ESP_RETURN_ON_ERROR(wr(KIBAN_IMU_ADDR, 0x20, 0x57), TAG, "ctrl1");   // 100 Hz, XYZ (sc7a20h.cc:18-19)
-    ESP_RETURN_ON_ERROR(wr(KIBAN_IMU_ADDR, 0x23, 0x88), TAG, "ctrl4");   // BDU + HR, +/-2 g
+    ESP_RETURN_ON_ERROR(kiban_i2c_wr(KIBAN_IMU_ADDR, 0x20, 0x57), TAG, "ctrl1");   // 100 Hz, XYZ (sc7a20h.cc:18-19)
+    ESP_RETURN_ON_ERROR(kiban_i2c_wr(KIBAN_IMU_ADDR, 0x23, 0x88), TAG, "ctrl4");   // BDU + HR, +/-2 g
     return ESP_OK;
 }
 
 esp_err_t kiban_imu_read(kiban_imu_sample_t *o)
 {
     uint8_t b[6];
-    ESP_RETURN_ON_ERROR(rd(KIBAN_IMU_ADDR, 0x28 | 0x80, b, 6), TAG, "out");
-    // 12-bit left-justified, +/-2 g high-resolution: 1 mg/LSB.
-    o->x_mg = (int16_t)(b[0] | (b[1] << 8)) >> 4;
+    ESP_RETURN_ON_ERROR(kiban_i2c_rd(KIBAN_IMU_ADDR, 0x28 | 0x80, b, 6), TAG, "out");
+    o->x_mg = (int16_t)(b[0] | (b[1] << 8)) >> 4;   // 12-bit left-justified, 1 mg/LSB at +/-2 g HR
     o->y_mg = (int16_t)(b[2] | (b[3] << 8)) >> 4;
     o->z_mg = (int16_t)(b[4] | (b[5] << 8)) >> 4;
-    return ESP_OK;
-}
-
-esp_err_t kiban_charger_set_vreg_mv(uint32_t mv)
-{
-    ESP_RETURN_ON_FALSE(mv >= KIBAN_CHARGER_VREG_MIN_MV && mv <= KIBAN_CHARGER_VREG_CAP_MV, ESP_ERR_INVALID_ARG, TAG,
-                        "VREG %lu mV outside %d..%d", (unsigned long)mv, KIBAN_CHARGER_VREG_MIN_MV,
-                        KIBAN_CHARGER_VREG_CAP_MV);
-    const uint32_t code = mv / 10;
-    uint8_t r4, r5, r16;
-    ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, 0x04, &r4, 1), TAG, "read 0x04");
-    ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, 0x05, &r5, 1), TAG, "read 0x05");
-    ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, 0x16, &r16, 1), TAG, "read 0x16");
-    const uint8_t n4 = (uint8_t)((r4 & 0x07) | ((code & 0x1F) << 3));
-    const uint8_t n5 = (uint8_t)((r5 & 0xF0) | ((code >> 5) & 0x0F));
-    if (n4 == r4 && n5 == r5) return ESP_OK;
-
-    // [measured] VREG writes are ignored while charging is enabled. Sequence after the crossmux SDK
-    // (0x1abin/freeink-sdk @e1008fc MetalioEink4Board.h:81-92): clear EN_CHG (0x16 bit5) and the
-    // watchdog bits (0x16[1:0]), write VREG, re-enable charging with HIZ (bit4) clear.
-    // If anything fails after charging is disabled, charging stays disabled (safe side).
-    ESP_RETURN_ON_ERROR(wr(KIBAN_CHARGER_ADDR, 0x16, (uint8_t)(r16 & ~0x23)), TAG, "disable charging");
-    // Vendor order: low part (0x04) then high part (0x05), both always written; a split field may
-    // latch on the high-byte write (vendor cx25601n.cc:106-108).
-    ESP_RETURN_ON_ERROR(wr(KIBAN_CHARGER_ADDR, 0x04, n4), TAG, "write 0x04 (charging left disabled)");
-    ESP_RETURN_ON_ERROR(wr(KIBAN_CHARGER_ADDR, 0x05, n5), TAG, "write 0x05 (charging left disabled)");
-    uint8_t v4, v5;
-    ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, 0x04, &v4, 1), TAG, "verify 0x04 (charging left disabled)");
-    ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, 0x05, &v5, 1), TAG, "verify 0x05 (charging left disabled)");
-    const uint32_t got = (uint32_t)(((v4 >> 3) & 0x1F) | ((v5 & 0x0F) << 5)) * 10;
-    ESP_RETURN_ON_FALSE(got == code * 10, ESP_ERR_INVALID_RESPONSE, TAG,
-                        "VREG read back %lu mV; charging left disabled", (unsigned long)got);
-    ESP_RETURN_ON_ERROR(wr(KIBAN_CHARGER_ADDR, 0x16, (uint8_t)((r16 & ~0x33) | 0x20)), TAG,
-                        "re-enable charging");
-    ESP_LOGI(TAG, "charger VREG %lu mV (was 0x04=%02x 0x05=%02x, 0x16=%02x)", (unsigned long)got, r4, r5, r16);
-    return ESP_OK;
-}
-
-// PCF8563 countdown timer interrupt (datasheet: 0x01 Control_status_2 TIE=bit0 TF=bit2,
-// 0x0E Timer_control TE=bit7 TD[1:0]=10 for 1 Hz, 0x0F Timer value). INT is open-drain, active low.
-esp_err_t kiban_rtc_timer_irq(uint8_t seconds)
-{
-    uint8_t c2;
-    ESP_RETURN_ON_ERROR(wr(KIBAN_RTC_ADDR, 0x0E, 0x00), TAG, "timer off");
-    ESP_RETURN_ON_ERROR(rd(KIBAN_RTC_ADDR, 0x01, &c2, 1), TAG, "ctrl2");
-    ESP_RETURN_ON_ERROR(wr(KIBAN_RTC_ADDR, 0x01, (uint8_t)((c2 & ~0x1C) | 0x01)), TAG, "TIE");   // clear AF/TF/TI_TP
-    ESP_RETURN_ON_ERROR(wr(KIBAN_RTC_ADDR, 0x0F, seconds), TAG, "timer value");
-    return wr(KIBAN_RTC_ADDR, 0x0E, 0x82);
-}
-
-esp_err_t kiban_rtc_timer_off(void)
-{
-    uint8_t c2;
-    ESP_RETURN_ON_ERROR(wr(KIBAN_RTC_ADDR, 0x0E, 0x00), TAG, "timer off");
-    ESP_RETURN_ON_ERROR(rd(KIBAN_RTC_ADDR, 0x01, &c2, 1), TAG, "ctrl2");
-    return wr(KIBAN_RTC_ADDR, 0x01, (uint8_t)(c2 & ~0x1D));
-}
-
-// ---- BQ27220 configuration (design capacity) ----------------------------------------------------
-// Ported from FreeInk SDK (MIT, Free-Ink/freeink-sdk @e637713
-// libs/hardware/BatteryMonitor/src/BatteryMonitor.cpp:130-238), after TI TRM SLUUBD4A 6.1:
-// unseal, full access, CONFIG UPDATE, checksummed data-memory word writes, exit with reinit, seal.
-#define G_CONTROL     0x00
-#define G_FCC         0x12
-#define G_OPSTATUS    0x3A    // CFGUPDATE bit 10, SEC[1:0] bits 2:1
-#define G_DESIGN_CAP  0x3C
-#define G_MAC_CONTROL 0x3E
-#define G_MAC_DATA    0x40
-#define G_MAC_SUM     0x60    // checksum low byte, MACDataLen high byte
-#define DM_LEARNED_FCC 0x929D
-#define DM_DESIGN_CAP  0x929F
-
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-
-static esp_err_t gw16(uint8_t reg, uint16_t v)
-{
-    i2c_master_dev_handle_t h = dev_for(KIBAN_GAUGE_ADDR);
-    ESP_RETURN_ON_FALSE(h, ESP_ERR_INVALID_STATE, TAG, "gauge");
-    const uint8_t b[3] = {reg, (uint8_t)v, (uint8_t)(v >> 8)};   // one transaction per word
-    return i2c_master_transmit(h, b, 3, XFER_TIMEOUT_MS);
-}
-
-// Write one big-endian data-memory word, fixing the block checksum by the changed bytes.
-static esp_err_t dm_write_word(uint16_t address, uint16_t value)
-{
-    uint16_t old, sum;
-    ESP_RETURN_ON_ERROR(gw16(G_MAC_CONTROL, address), TAG, "select");
-    vTaskDelay(pdMS_TO_TICKS(10));
-    ESP_RETURN_ON_ERROR(g16(G_MAC_DATA, &old), TAG, "read word");
-    ESP_RETURN_ON_ERROR(g16(G_MAC_SUM, &sum), TAG, "read sum");
-    const uint16_t be = (uint16_t)((value >> 8) | (value << 8));
-    ESP_LOGI(TAG, "DM 0x%04x: old word 0x%04x (= %u), sum reg 0x%04x, new %u", address, old,
-             (unsigned)(uint16_t)((old >> 8) | (old << 8)), sum, value);
-    if (old == be) return ESP_OK;
-    sum = (uint16_t)((sum & 0xFF00) | (uint8_t)(sum + (old & 0xFF) + (old >> 8) - (value & 0xFF) - (value >> 8)));
-    ESP_RETURN_ON_ERROR(gw16(G_MAC_CONTROL, address), TAG, "reselect");   // reading the sum may advance the block
-    vTaskDelay(pdMS_TO_TICKS(10));
-    ESP_RETURN_ON_ERROR(gw16(G_MAC_DATA, be), TAG, "write word");
-    return gw16(G_MAC_SUM, sum);
-}
-
-esp_err_t kiban_gauge_set_design_capacity(uint16_t mah, bool force)
-{
-    uint16_t dc, st;
-    ESP_RETURN_ON_ERROR(g16(G_DESIGN_CAP, &dc), TAG, "design cap");
-    if (dc == mah) return ESP_OK;
-    if (dc != 3000 && !force) {
-        ESP_LOGW(TAG, "design capacity is %u mAh (not the TI default); not changing without force", dc);
-        return ESP_ERR_INVALID_STATE;
-    }
-    static const uint16_t unlock[] = {0x0414, 0x3672, 0xFFFF, 0xFFFF};
-    for (size_t i = 0; i < sizeof unlock / sizeof unlock[0]; i++) {
-        ESP_RETURN_ON_ERROR(gw16(G_CONTROL, unlock[i]), TAG, "unlock");
-        vTaskDelay(pdMS_TO_TICKS(1500));   // some BQ27220s ignore keys sent back to back
-    }
-    g16(G_OPSTATUS, &st);
-    ESP_LOGI(TAG, "after keys: OperationStatus 0x%04x (SEC=%u)", st, (st >> 1) & 3);
-    ESP_RETURN_ON_ERROR(gw16(G_CONTROL, 0x0090), TAG, "enter cfg update");
-    bool in_cfg = false;
-    for (int i = 0; i < 10 && !in_cfg; i++) {
-        vTaskDelay(pdMS_TO_TICKS(500));
-        in_cfg = g16(G_OPSTATUS, &st) == ESP_OK && (st & 0x0400);
-    }
-    ESP_LOGI(TAG, "cfg update %s (OperationStatus 0x%04x)", in_cfg ? "entered" : "NOT entered", st);
-    esp_err_t err = in_cfg ? ESP_OK : ESP_ERR_TIMEOUT;
-    if (err == ESP_OK) err = dm_write_word(DM_LEARNED_FCC, mah);
-    if (err == ESP_OK) { vTaskDelay(pdMS_TO_TICKS(500)); err = dm_write_word(DM_DESIGN_CAP, mah); }
-    gw16(G_CONTROL, in_cfg ? 0x0091 : 0x0092);   // exit CONFIG UPDATE (with reinit after writes)
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    gw16(G_CONTROL, 0x0030);                     // seal
-    vTaskDelay(pdMS_TO_TICKS(100));
-    uint16_t after = 0;
-    g16(G_DESIGN_CAP, &after);
-    ESP_LOGI(TAG, "design capacity %u -> %u mAh (%s)", dc, after, esp_err_to_name(err));
-    if (err == ESP_OK && after != mah) err = ESP_ERR_INVALID_RESPONSE;
-    return err;
-}
-
-// Diagnostic: send the TI default unseal keys with a given gap, report the security mode, re-seal.
-esp_err_t kiban_gauge_unseal_test(uint32_t gap_ms, uint8_t *sec_before, uint8_t *sec_after)
-{
-    uint16_t st = 0;
-    ESP_RETURN_ON_ERROR(g16(G_OPSTATUS, &st), TAG, "status");
-    if (sec_before) *sec_before = (st >> 1) & 3;
-    gw16(G_CONTROL, 0x0414);
-    vTaskDelay(pdMS_TO_TICKS(gap_ms ? gap_ms : 1));
-    gw16(G_CONTROL, 0x3672);
-    vTaskDelay(pdMS_TO_TICKS(100));
-    ESP_RETURN_ON_ERROR(g16(G_OPSTATUS, &st), TAG, "status");
-    if (sec_after) *sec_after = (st >> 1) & 3;
-    gw16(G_CONTROL, 0x0030);   // seal again
     return ESP_OK;
 }

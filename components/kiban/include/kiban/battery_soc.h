@@ -1,12 +1,12 @@
-// State-of-charge estimator independent of the fuel gauge's (unconfigurable) model: coulomb counting
-// on the gauge's AverageCurrent() with a known capacity, anchored to "charge terminated" (= 100 %) and,
-// after a rest period, to an open-circuit-voltage table. Pure computation; no hardware access, so it
-// can be unit-tested on the host.
-//
-// Time base: `now_us` must be monotonic within one boot (esp_timer). Gaps longer than `max_gap_us`
-// (deep sleep, power-off, a reboot) are never integrated: the estimate is re-anchored to the voltage
-// table instead, because the battery has been resting during the gap. Persisting soc_pct across a true
-// power-off needs storage chosen by the product (open).
+// State-of-charge estimator independent of the fuel gauge's (sealed, 3000 mAh-default) model.
+//  - Coulomb counting on the gauge's AverageCurrent() with a known capacity.
+//  - Anchors: 100 % at charge termination; 0 % after several consecutive low IR-compensated samples;
+//    after a rest period, a slow pull towards an open-circuit-voltage (OCV) table.
+//  - While not charging the estimate is kept within +/-15 % of the OCV estimate.
+//  - Gaps (deep sleep, power-off, reboot) are never integrated with the waking current: call
+//    kiban_soc_resume() with the gap length (e.g. from the RTC) at boot; an undeclared gap
+//    (dt > max_gap_us or time going backwards) is handled the same way with gap = dt or unknown.
+// Pure computation; host-testable (tests/host/test_battery_soc.c).
 #pragma once
 
 #include <stdbool.h>
@@ -16,31 +16,46 @@
 extern "C" {
 #endif
 
+// Cell capacity: ~1000 mAh [community] (comparisontabl.es), unverified on the device.
+#define KIBAN_BATTERY_CAPACITY_MAH 1000
+
 typedef struct {
-    float capacity_mah;     // usable capacity; ~1000 mAh for this device [community], unverified
-    int64_t max_gap_us;     // samples further apart than this are treated as a gap (default 120 s)
-    float soc_pct;          // current estimate 0..100
-    bool valid;             // false until the first sample (or a restore)
+    // configuration
+    float capacity_mah;     // > 0
+    int64_t max_gap_us;     // samples further apart are a gap (default 120 s)
+    float sleep_ma;         // assumed average draw during a gap (default 3 mA [inference], to be measured)
+    // state
+    double soc_pct;         // estimate 0..100
+    bool valid;
     int64_t last_us;
     int64_t rest_since_us;  // start of the current low-current period, or -1
-    uint8_t shown_pct;      // display value with hysteresis
+    float pending_gap_s;    // declared by kiban_soc_resume(); < 0 = none
+    uint8_t low_count;      // consecutive samples below the empty threshold
+    bool critical;          // IR-compensated voltage below the critical threshold
+    uint8_t shown_pct;      // display value
+    int64_t shown_us;       // last display step
 } kiban_soc_t;
 
 typedef struct {
     uint16_t mv;            // terminal voltage
-    int16_t ma;             // + charging, - discharging (gauge AverageCurrent(), 0x14)
-    bool charge_terminated; // charger reports done/not charging while not discharging
-    int64_t now_us;
+    int16_t ma_now;         // instantaneous current (Current(), 0x0C) for IR compensation
+    int16_t ma_avg;         // average current (AverageCurrent(), 0x14) for integration; + = charging
+    bool charging;          // charger in pre-charge / CC / CV / top-off
+    bool terminated;        // external power present and charge terminated
+    uint16_t vreg_mv;       // charger termination voltage (for the 100 % anchor)
+    int64_t now_us;         // monotonic within one boot (esp_timer)
 } kiban_soc_sample_t;
 
 void kiban_soc_init(kiban_soc_t *s, float capacity_mah);
-// Start from a saved value (e.g. stored before power-off) instead of the voltage table.
+// Start from a saved estimate (e.g. kept in RTC memory or flash). Invalid values are ignored.
 void kiban_soc_restore(kiban_soc_t *s, float soc_pct, int64_t now_us);
-// Feed one sample (any interval; 1-60 s typical). Returns the updated estimate 0..100.
+// Declare a gap of gap_s seconds (sleep / power-off) before the next update; < 0 = unknown length.
+void kiban_soc_resume(kiban_soc_t *s, float gap_s);
 float kiban_soc_update(kiban_soc_t *s, const kiban_soc_sample_t *in);
-// Integer for display: moves at most 1 % per call and only in the direction of the estimate.
-uint8_t kiban_soc_display(kiban_soc_t *s);
-// Generic 4.2 V Li-ion open-circuit-voltage curve (to be replaced by a measured one).
+// Display value: deadband 0.6 %, at most one step per 20 s, never rises while discharging and never
+// falls while charging.
+uint8_t kiban_soc_display(kiban_soc_t *s, int64_t now_us, bool charging);
+// Generic 4.2 V Li-ion OCV curve [inference], to be replaced by a measured one.
 float kiban_soc_from_ocv(float ocv_mv);
 
 #ifdef __cplusplus
