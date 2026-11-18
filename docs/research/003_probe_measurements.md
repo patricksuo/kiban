@@ -33,7 +33,8 @@ label is not yet checked). Each entry is `[measured]` unless tagged otherwise. D
 ## Power and power-up behaviour
 
 - **Power-on needs a long press of POWER (~3 s).** A short press did not turn the device on.
-- **A long press "off" does not power-cycle the TCA9555.** After long-press off and power-on, the expander still
+- **The stock firmware's long press "off" does not power-cycle the TCA9555** (a real `kiban_power_off` does; see
+  0.2.0 checks). After long-press off and power-on, the expander still
   held the vendor firmware's configuration (`config=0xf58c`, output `0xffed`) instead of its power-on default
   (`0xffff`/`0xffff`). The expander therefore sits on a supply that the power key does not cut `[inference]`;
   only removing the battery (or a full drain) would reset it.
@@ -318,3 +319,15 @@ output); the probe keeps them in RAM only (`WIFI_STORAGE_RAM`, no NVS). Network 
 | HTTP download, 1 MB from a UK server (TCP connect ~300 ms) | 13 KB/s: bound by the default TCP receive window (~5.7 KB) over a long RTT, not by the radio `[inference]` |
 | HTTPS to that CDN (chain: leaf → GTS WE1 → GTS Root R4 cross-signed by GlobalSign Root CA) | `esp-x509-crt-bundle: Failed to verify certificate` (-0x3000) with the full IDF bundle, SHA-384 and P-384 enabled, no date check. Suspected cross-signed-chain handling `[inference]`; tracked as W1 in design/001 §8 |
 | Console task stack | 4 KB default overflowed during the TLS handshake (silent reboot); 16 KB works |
+
+## 0.2.0 checks
+
+| Item | Result |
+|---|---|
+| Self-check after the API refactor | charge policy "already set"; 6 I2C devices; battery poll "full" at 4274 mV; EPD FULL 1018 ms; Wi-Fi scan via `kiban_net` |
+| `kiban_power_off_for(300)` (1/60 Hz RTC source) | Armed 22:02:29, power cut by 22:02:32, board powered itself on at 22:06:49 (4 min 20 s: the first 1/60 Hz period is partial, as documented by NXP) |
+| **TCA9555 after a real power-off** | At the RTC power-on boot the expander read output `0xffff`, config `0xffff` (power-on default): **it loses power when the power-switch chip cuts the board**. The earlier "keeps its state" observation (P1) applies only to the stock firmware's long-press off, which did not cut power |
+| Consumer build | A throwaway ESP-IDF project depending on `kiban` and `kiban_net` by git URL + commit builds (component manager cache had to be cleared once) |
+
+Consequence for B1: the USB mux default can now be tested without removing the battery: `kiban_power_off`, then hold
+AI and long-press POWER (ROM download mode, expander unconfigured) and check USB enumeration (needs the user's hands).
