@@ -45,6 +45,7 @@ static const char *auth_name(wifi_auth_mode_t a)
     case WIFI_AUTH_WPA2_WPA3_PSK: return "wpa2/wpa3";
     default: return "other";
     }
+}
 
 static esp_err_t wifi_up(void)
 {
@@ -76,8 +77,6 @@ static void wifi_down(void)
     esp_wifi_stop();
     esp_wifi_deinit();
     s_up = false;
-}
-
 }
 
 // wifi join <ssid> <password>: credentials live in RAM only (WIFI_STORAGE_RAM, no NVS); never printed.
