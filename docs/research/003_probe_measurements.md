@@ -215,3 +215,10 @@ So the loop (module output path + speaker → microphone + module input path) ad
 ±1 ms**; output latency alone is at most that. With the default DMA ring the latency is larger and varies by tens of
 ms. `kiban_audio_set_dma()` selects the ring; products needing accurate starts should use a small ring (e.g. 4 × 64)
 and keep the ring fed (underrun behaviour with a real decoder is not yet measured) `[inference]`.
+
+### P6 · Module identification
+
+Read-only probing only (no `=` commands). The module answers `AT ERROR` (~120 ms) to `AT+VER`, `AT+VERSION`, `AT+VER?`,
+`AT+HELP`, `AT+MODE?`, `AT+RX?`, `AT+NAME?`, `AT+ADDR?`, `AT+GMR`, and nothing to a bare `AT`. Model and firmware
+version cannot be read over UART; the only known command set is the vendor's (`AT+RX=`, `AT+TX=`, `AT+MODE=`,
+`AT+INQUIRING`, `AT+CONNECT=`, `AT+PP=`, `AT+BTSCO=`). Identifying the chip needs the board marking or the vendor.
