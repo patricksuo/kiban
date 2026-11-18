@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS "probe_main.c" "cmd_board.c" "cmd_epd.c" "cmd_touch.c" "cmd_sensors.c" "cmd_storage.c"
+    SRCS "probe_main.c" "cmd_board.c" "cmd_epd.c" "cmd_touch.c" "cmd_sensors.c" "cmd_storage.c" "cmd_audio.c"
     INCLUDE_DIRS "."
     PRIV_REQUIRES console fatfs sdmmc app_update esp_psram spi_flash esp_driver_gpio esp_timer heap
 )
