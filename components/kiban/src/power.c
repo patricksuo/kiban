@@ -9,6 +9,9 @@
 #include "kiban/audio.h"
 #include "kiban/board.h"
 #include "kiban/touch.h"
+#include "kiban/ioexp.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 static const char *TAG = "kiban.power";
 
@@ -49,4 +52,22 @@ void kiban_power_deep_sleep(const kiban_wake_cfg_t *w)
     }
     ESP_LOGI(TAG, "deep sleep (timer %lu ms, power key %d)", (unsigned long)w->timer_ms, w->power_key);
     esp_deep_sleep_start();
+}
+
+esp_err_t kiban_power_off(uint32_t max_ms)
+{
+    // Sequence after FreeInk (MIT, metalio-eink4-support.md:102-121) and the vendor PwrOffTask
+    // (power_hw.cc:361-385) but bounded: amp off, rails stay on, toggle P1.3 every 100 ms until the
+    // power-switch chip cuts power or max_ms elapses (USB keeps the board powered).
+    kiban_audio_amp(false);
+    ESP_LOGW(TAG, "power off: pulsing PWR_KEY for up to %lu ms", (unsigned long)max_ms);
+    bool level = true;
+    for (uint32_t t = 0; t < max_ms; t += 100) {
+        level = !level;
+        kiban_ioexp_set(KIBAN_IOEXP_PWR_KEY_PULSE, level);
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    kiban_ioexp_set(KIBAN_IOEXP_PWR_KEY_PULSE, true);   // back to idle high
+    ESP_LOGW(TAG, "power off: still running after %lu ms (external power present?)", (unsigned long)max_ms);
+    return ESP_ERR_TIMEOUT;
 }

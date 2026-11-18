@@ -23,6 +23,11 @@ esp_err_t kiban_power_quiesce(void);
 // Light sleep: RAM and peripherals keep state; returns the wake cause. USB-Serial/JTAG may drop.
 esp_sleep_wakeup_cause_t kiban_power_light_sleep(const kiban_wake_cfg_t *wake);
 
+// Hardware power-off via the power-switch chip. On battery it does not return. Returns
+// ESP_ERR_TIMEOUT after max_ms when external power keeps the board on (caller then falls back,
+// e.g. to deep sleep with POWER wake). Call kiban_power_quiesce() and put the panel to sleep first.
+esp_err_t kiban_power_off(uint32_t max_ms);
+
 // Deep sleep: wakes through a reset. Does not return.
 void kiban_power_deep_sleep(const kiban_wake_cfg_t *wake) __attribute__((noreturn));
 

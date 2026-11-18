@@ -9,6 +9,7 @@
 #include "esp_rtc_time.h"
 #include "esp_sleep.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "kiban/board.h"
@@ -25,6 +26,31 @@ static RTC_NOINIT_ATTR light_rec_t s_deep;   // filled at the boot that follows 
 static RTC_DATA_ATTR int64_t s_deep_start_us;
 static RTC_DATA_ATTR uint32_t s_deep_asked_ms;
 #define MAGIC 0x6b696261
+
+// Power-off test record: stage 1 = pulsing started, 2 = power stayed on, fell back to deep sleep.
+typedef struct { uint32_t magic; int stage; } off_rec_t;
+static RTC_NOINIT_ATTR off_rec_t s_off;
+
+// Full-screen markers drawn directly in the 800x480 frame (orientation irrelevant).
+static void draw_marker(bool off_screen)
+{
+    uint8_t *fb = heap_caps_malloc(KIBAN_EPD_FB_BYTES, MALLOC_CAP_SPIRAM);
+    if (!fb) return;
+    for (int y = 0; y < KIBAN_EPD_HEIGHT; y++)
+        for (int x = 0; x < KIBAN_EPD_WIDTH; x++) {
+            bool black;
+            if (off_screen) black = !(x >= 300 && x < 500 && y >= 140 && y < 340);   // black, white square
+            else black = ((x / 40) + (y / 40)) % 2 == 0;                              // checkerboard
+            uint8_t *b = &fb[y * (KIBAN_EPD_WIDTH / 8) + x / 8];
+            const uint8_t m = (uint8_t)(0x80 >> (x % 8));
+            if (black) *b &= (uint8_t)~m; else *b |= m;
+        }
+    if (kiban_epd_init() == ESP_OK) {
+        kiban_epd_show(fb, KIBAN_EPD_MODE_FULL, 0);
+        kiban_epd_sleep();
+    }
+    free(fb);
+}
 
 static const char *cause_name(int c)
 {
@@ -50,6 +76,16 @@ void probe_report_wake(void)
     if (s_deep.magic == MAGIC)
         printf("last deep sleep: asked %lld ms, slept %lld ms, cause %s\n", (long long)s_deep.asked_ms,
                (long long)s_deep.slept_ms, cause_name(s_deep.cause));
+    if (esp_reset_reason() == ESP_RST_POWERON) {
+        printf("power-on reset: the board was really off (or first power). Drawing the checkerboard marker.\n");
+        draw_marker(false);
+    }
+    if (s_off.magic == MAGIC) {
+        printf("last poweroff: %s\n", s_off.stage == 2 ? "power stayed on after 5 s of pulses; fell back to deep sleep"
+                                                      : "pulsing started, no fallback recorded");
+        s_off.magic = 0;
+    }
+    kiban_rtc_timer_off();   // clear any armed RTC countdown / pending INT
     if (s_light.magic == MAGIC)
         printf("last light sleep: asked %lld ms, slept %lld ms, cause %s\n", (long long)s_light.asked_ms,
                (long long)s_light.slept_ms, cause_name(s_light.cause));
@@ -82,6 +118,27 @@ static int cmd_sleep(int argc, char **argv)
     }
     printf("light|deep\n");
     return 1;
+}
+
+// poweroff [delay_s] [rtc_s]: draw the OFF marker, wait delay_s (time to unplug USB), optionally arm the
+// RTC countdown, then pulse the power-switch chip for at most 5 s; fall back to deep sleep (POWER wake).
+static int cmd_poweroff(int argc, char **argv)
+{
+    const int delay_s = argc > 1 ? atoi(argv[1]) : 0;
+    const int rtc_s = argc > 2 ? atoi(argv[2]) : 0;
+    printf("poweroff: OFF marker, delay %d s, RTC countdown %d s\n", delay_s, rtc_s);
+    draw_marker(true);
+    for (int i = delay_s; i > 0; i--) { printf("  %d\n", i); vTaskDelay(pdMS_TO_TICKS(1000)); }
+    if (rtc_s > 0) kiban_rtc_timer_irq((uint8_t)(rtc_s > 255 ? 255 : rtc_s));
+    kiban_power_quiesce();
+    s_off = (off_rec_t){.magic = MAGIC, .stage = 1};
+    kiban_power_off(5000);
+    s_off.stage = 2;
+    printf("still powered after 5 s: deep sleep, wake with POWER\n");
+    fflush(stdout);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    const kiban_wake_cfg_t w = {.timer_ms = 0, .power_key = true};
+    kiban_power_deep_sleep(&w);
 }
 
 // Start the PCF8563 countdown interrupt and watch candidate lines for a change.
@@ -117,6 +174,7 @@ void probe_register_power_cmds(void)
 {
     const esp_console_cmd_t cmds[] = {
         {.command = "sleep", .help = "sleep light|deep <ms> [key]", .func = cmd_sleep},
+        {.command = "poweroff", .help = "poweroff [delay_s] [rtc_s]: hardware power-off test (5 s max, then deep sleep)", .func = cmd_poweroff},
         {.command = "rtcint", .help = "rtcint [s]: arm the RTC countdown interrupt and watch where it shows up", .func = cmd_rtcint},
     };
     for (size_t i = 0; i < sizeof cmds / sizeof cmds[0]; i++) ESP_ERROR_CHECK(esp_console_cmd_register(&cmds[i]));
