@@ -1,0 +1,13 @@
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_stock.csv"
+# Console on the native USB-Serial/JTAG (the port esptool auto-resets through).
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+# Embedded 8 MB PSRAM; keep booting if the mode is wrong so the console survives.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_IGNORE_NOTFOUND=y
+# Chip is rev v0.2.
+CONFIG_ESP32S3_REV_MIN_0=y
