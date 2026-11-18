@@ -188,3 +188,13 @@ All read-only except the accelerometer configuration (CTRL_REG1/4). USB plugged 
 | Read speed | 2.35 MB/s at 20 MHz, 4.51 MB/s at 40 MHz (only a 66 KB file was available; rough figures) |
 | Card contents | `metalio/e-ink/logs/` holds the vendor firmware's ring log and a moved core dump (see research/001 §4.8) |
 | Motor | GPIO44 on/off. A 200 ms pulse is clearly felt; the vendor's 35 ms pulse was barely noticeable to the user |
+
+## P6 · Bluetooth audio module (first pass)
+
+| Item | Result |
+|---|---|
+| UART2 115200 (TX48/RX47) | Module answers. `AT+RX=2` is answered with `AT+RX=0` (meaning unknown); `AT+MODE=1` with `SET MODE 1` ~120 ms later |
+| I2S0 slave (BCLK6, WS43, DOUT7), 32-bit stereo | Module supplies the clock after `SET MODE 1`: writing 16000 frames takes ~922–928 ms (1 s minus the initial DMA fill) → 16 kHz |
+| Open sequence | ~2.7 s including the vendor's 700 ms gap and a 2 s confirmation window |
+| Tone 440 Hz, 1 s, amplifier P0.1=0 / P0.4=1 | Audible at 5 %, 15 %, 30 % (linear sample scale). 30 % is already loud; the user heard slight distortion at 30 %, none at 5 % and 15 % |
+| Not yet measured | Start latency (write → sound), module model / AT command set, microphone path, behaviour after main-rail power cycles, current draw |
