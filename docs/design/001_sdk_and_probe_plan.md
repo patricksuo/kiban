@@ -90,6 +90,10 @@ The final headers are written in stage order (§6) and reviewed per stage, not a
 
 ### 4.1 The one real bricking risk: USB routing
 
+Status: the probe now boots and drives P0.0 high itself (see research/003). The expander keeps its state across a
+power-key power-off, so the unconfigured default only matters after the battery is removed or fully drained; it is
+still unknown.
+
 USB to the ESP32-S3 goes through a mux (FSUSB42) selected by TCA9555 P0.0 (high = ESP debug/flash path).
 The stock firmware drives it high at boot. **Which way the mux defaults while the expander is still an input
 (power-on, ROM download mode, or a firmware that crashes before driving P0.0) is unknown** (kiban 001, to-verify).
