@@ -76,6 +76,21 @@ Run with `epd` probe commands; visual results reported by the user looking at th
 
 Timing resolution is one RTOS tick (10 ms). `init` itself shows BUSY 0 ms because no refresh runs during init.
 
+## P3 · Touch (CST816S)
+
+Run with the guided `touch_test` command (on-screen targets drawn through the measured portrait mapping).
+
+| Item | Result |
+|---|---|
+| Coordinate frame | Touch native portrait (x 0..479, y 0..799) matches the display's portrait frame: no swap, no mirror |
+| Tap accuracy | Targets (50,50) → (52,65); (430,750) → (439,765); (240,400) → (246,422): x +2..+9, **y consistently +15..+22** (finger lands below the aimed point) |
+| Swipe | (248,195) → (244,695) along a vertical arrow; 72 samples at 10 ms polling |
+| Gesture register | Always 0x00; gestures must be derived from the point track (or the controller's gesture mode enabled) |
+| Cover keys | Physical layout: left = round orange key, middle and right = dark pills. Each reports a fixed coordinate while held: **left (80, 900), middle (400, 900), right (240, 900)** — middle and right are swapped relative to the vendor source comments |
+| Idle reads | Reads may NACK while nothing touches the panel (handled; not counted as errors) |
+
+With the vendor's key semantics (240 = NEXT, 400 = PREV) this means: middle pill = previous page, right pill = next page.
+
 ## P2 implementation notes
 
 What `components/kiban/src/epd.c` and the `epd` probe command were built from.

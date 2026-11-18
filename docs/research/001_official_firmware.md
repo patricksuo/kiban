@@ -225,6 +225,9 @@ The driver caches the currently loaded table (`loaded_lut`) and only rewrites on
 | NEXT | (240, 900), comment "cover middle" | Does nothing by default; taken over by screens (next page) |
 | PREV | (400, 900), comment "cover right" | Back by default; taken over by screens (previous page) |
 
+On the device the source comments' positions are swapped: the **middle** pill reports (400, 900) and the **right**
+pill reports (240, 900) `[measured]` (research/003 P3).
+
 - Coordinates defined in `config.h:64-70`. y=900 is outside the 800 px panel; it is a fixed point the touch chip reports for the cover key area.
 - **Matching requires exact coordinate equality**: `x == vk.x && y == vk.y` (`lv_adapter_display.cc:219-226`).
 - Long-press threshold 500 ms (`metalio_display_setup.cc:48-54`). Holding PREV/NEXT jumps ±10 pages per second from the press (`vk_page_repeat.cc:12-15,44-53,102-104`).
