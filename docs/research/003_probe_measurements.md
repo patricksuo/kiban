@@ -258,3 +258,16 @@ Consequences `[inference]`:
 - Consequence: the gauge's SOC / remaining / full capacity remain based on 3000 mAh and are not usable. Voltage,
   current and temperature readings do not depend on that configuration. kiban computes its own state of charge
   from them (see `battery_soc`).
+
+## Charge policy and battery state (after the battery review)
+
+User decisions (2026-11-18): VREG 4200 mV, ICHG 480 mA (the vendor's "slow" setting is 500 mA requested = 480 mA
+actual; its default is 1000 mA = 960 mA actual, `[source] metalio_board_periph.cc:109-115`), charge termination on
+(the vendor left EN_TERM off: 0x14 = `0x03`), fail closed when the policy cannot be verified.
+
+| Item | Result |
+|---|---|
+| After `kiban_charger_apply()` | VREG 4200 mV, ICHG 480 mA, IINDPM 960 mA (unchanged), EN_CHG 1, HIZ 0, EN_TERM 1 (0x14 = `0x07`), WDT 0 |
+| Idempotent boot | Next boot reports "already set" and only confirms charging is enabled |
+| Charger state vs. current | With the cell at 4300 mV (above VREG 4200) and USB attached, CHRG_STAT reads 1 ("pre-charge / CC") while the gauge shows −45 mA: the system draws from the cell. "Charging" therefore requires CHRG_STAT ≥ 1 **and** current flowing in |
+| 0x1A | `0xbd`; bit 7 set by the vendor init (meaning unknown without a datasheet; possibly an NTC-ignore bit `[to-verify]`). kiban does not write it; a temperature gate (0–45 °C on the gauge temperature) is applied in software |

@@ -16,8 +16,9 @@ Docs, code comments and commit messages in English. Conversation with the user i
 ## Rules
 
 - Discuss before implementing: no implementation without the user's explicit go; list any decision made on their behalf.
-- ⛔ Charger (CX25601N): the only write is VREG via `kiban_charger_set_vreg_mv()`, **capped at 4200 mV** until the cell's
-  rated charge voltage is confirmed (user decision 2026-11-18; the vendor firmware uses 4400 mV). No other charger register writes.
+- ⛔ Charger (CX25601N): only `kiban_charger_apply()` / `kiban_charger_set_enabled()` write it (VREG, ICHG, EN_TERM,
+  EN_CHG/HIZ/WDT). **VREG capped at 4200 mV** until the cell's rated charge voltage is confirmed; ICHG 480 mA default,
+  max 960 mA; fail closed (user decisions 2026-11-18). No other charger register writes.
 - ⛔ Never `espefuse burn*`. esptool without `--baud 921600`. Do not overwrite the bootloader or partition
   table without an explicit decision; flashing the device needs the user's go each time.
 - The public API is the contract for both products: changing it requires stating the impact on bunko/manabu and bumping the version.
