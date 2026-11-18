@@ -154,6 +154,17 @@ static int cmd_audio(int argc, char **argv)
         for (int i = 1; i <= n && i <= 20; i++) latency_once(i, vol > 30 ? 30 : vol);
         return 0;
     }
+    if (!strcmp(argv[1], "btone")) {   // tone over I2S with the speaker amplifier OFF (for a BT headset)
+        const int hz = argc > 2 ? atoi(argv[2]) : 440, ms = argc > 3 ? atoi(argv[3]) : 2000;
+        int vol = argc > 4 ? atoi(argv[4]) : 5;
+        if (vol > 30) vol = 30;
+        kiban_audio_amp(false);
+        int64_t el; size_t fr = 0;
+        esp_err_t err = play(hz, ms, vol, &el, &fr);
+        printf("btone: %s, %d Hz %d ms vol %d%%, wrote %u frames in %lld ms (amp off)\n", esp_err_to_name(err), hz, ms,
+               vol, (unsigned)fr, (long long)el);
+        return 0;
+    }
     if (!strcmp(argv[1], "tone")) {
         const int hz = argc > 2 ? atoi(argv[2]) : 440, ms = argc > 3 ? atoi(argv[3]) : 1000;
         int vol = argc > 4 ? atoi(argv[4]) : 5;
@@ -175,6 +186,6 @@ static int cmd_audio(int argc, char **argv)
 
 void probe_register_audio_cmds(void)
 {
-    const esp_console_cmd_t cmd = {.command = "audio", .help = "audio open | at <CMD> | clk | tone [hz] [ms] [vol%] | latency [n] [vol%] | close", .func = cmd_audio};
+    const esp_console_cmd_t cmd = {.command = "audio", .help = "audio open | at <CMD> | clk | tone|btone [hz] [ms] [vol%] | latency [n] [vol%] | close", .func = cmd_audio};
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
 }
