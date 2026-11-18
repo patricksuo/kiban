@@ -288,3 +288,18 @@ recorded (public repo).
 The device receives about 13–18 dB less than the laptop at the same spot `[measured]`, single location and orientation.
 Plausible causes: metal housing, small antenna, placement `[inference]`. Products should treat Wi-Fi as weak and
 intermittent (download, then work offline). Connection throughput not measured yet.
+
+## BLE (NimBLE, passive scan)
+
+No stack initialises NVS by itself (`nvs_flash_init` is only called by BLE Mesh, which is disabled) and kiban never
+calls it, so the stock NVS partition cannot be opened at all; NimBLE persistence is also off. Addresses and names are
+not recorded.
+
+| Item | Result |
+|---|---|
+| Init | 47 ms |
+| Passive scan, 10 s | 14 and 15 devices (478 / 355 advertising reports) |
+| RSSI | best −20 dBm (devices on the same desk), worst −99 dBm; by device: 6 above −60, 1 at −70..−80, 2 at −80..−90, 5–6 below −90 |
+
+Nearby 2.4 GHz devices are received strongly, so the antenna path works; the weak Wi-Fi RSSI is mostly distance to the
+access point, with the laptop's better antenna adding margin `[inference]`.
