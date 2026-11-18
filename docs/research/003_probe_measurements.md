@@ -114,7 +114,7 @@ BUSY timing resolution is one RTOS tick (10 ms at `CONFIG_FREERTOS_HZ=100`). The
 ### Questions for the first device run
 
 Answered by the P2 table above: 1 (orientation), 2 and 3 (BUSY polarity, DC/RST), 6 (gray band order).
-Still open: 4 (which partial LUT ghosts least over many pages), 5 (whether the 0x26 resync is needed), 7 (sleep RAM retention).
+Still open: 4, 5, 7 — tracked as E1, E2, E3 in design/001 §8.
 
 1. **Orientation** `[inference]`. Frame row 0 is written to gate address 479 (data entry `0x11=0x01`, Y counter
    starting at 479), exactly as the vendor does. The vendor's portrait UI maps logical `(lx, ly)` to panel

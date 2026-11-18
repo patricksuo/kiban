@@ -143,3 +143,15 @@ P6 and P7 decide manabu's feasibility (sentence-accurate audio, battery life) an
 1. Approve this layout and stage order.
 2. Approve the USB-mux test in §4.1 (no flashing; needs the user's hands on BOOT + power).
 3. Approve flashing the probe into `ota_0` once P0 builds (replaces the stock firmware until restored).
+
+## 8. Open items
+
+Items that are known but not yet settled. Each has a trigger: the point at which it must be resolved.
+
+| # | Item | Why it matters | How to settle | Must be settled before |
+|---|---|---|---|---|
+| E1 | Which partial-refresh waveform ghosts least over many page turns (vendor partial LUT vs FreeInk `lut_fast_metalio`), and how many partials before a forced full refresh | Page-turn quality and speed in the reader | Probe command that turns N pages of real text with each LUT and a configurable full-refresh interval; user judges ghosting after 10/20/50 turns; record BUSY times | bunko's page-turn implementation |
+| E2 | Whether rewriting the old-frame plane (0x26) after each partial is needed | Costs ~40 ms per page turn | Run the E1 sequence with and without the resync; compare ghosting and correctness | bunko's page-turn implementation (decide together with E1) |
+| E3 | Whether panel deep sleep (`0x10=0x01`) keeps controller RAM, so a partial refresh is valid after wake | Decides whether wake-from-sleep needs a ~1 s full refresh before the first page turn | Sleep the panel, wake/re-init without a full refresh, partial-refresh a known frame, check for garbage | Power policy (stage P7) |
+| B1 | Default of the USB mux (P0.0) with an unconfigured TCA9555 | Recovery path if the battery is fully drained or removed while a broken firmware is installed | Only observable after a real expander power loss (battery fully drained); note the result when it happens | Shipping any firmware that others may install |
+| B2 | Intermittent USB enumeration on the Mac (cable orientation suspected) | Development friction only | Note conditions each time it happens | — |
