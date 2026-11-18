@@ -10,6 +10,8 @@
 #include "esp_sleep.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
+#include "nvs.h"
+#include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "kiban/board.h"
@@ -21,6 +23,7 @@
 
 // Survive the chip reset that opening the port causes on macOS.
 typedef struct { uint32_t magic; int cause; int64_t asked_ms, slept_ms; } light_rec_t;
+static void slog_continue(void);
 static RTC_NOINIT_ATTR light_rec_t s_light;
 static RTC_NOINIT_ATTR light_rec_t s_deep;   // filled at the boot that follows a deep-sleep wake
 static RTC_DATA_ATTR int64_t s_deep_start_us;
@@ -95,6 +98,7 @@ void probe_report_wake(void)
         s_off.magic = 0;
     }
     kiban_rtc_wake_cancel();   // clear any armed RTC countdown / pending INT
+    slog_continue();           // overnight log: sample and go back to sleep (does not return while active)
     if (s_light.magic == MAGIC)
         printf("last light sleep: asked %lld ms, slept %lld ms, cause %s\n", (long long)s_light.asked_ms,
                (long long)s_light.slept_ms, cause_name(s_light.cause));
@@ -150,6 +154,111 @@ static int cmd_poweroff(int argc, char **argv)
     kiban_power_deep_sleep(&w);
 }
 
+// ---- overnight sleep-current log -----------------------------------------------------------
+// sleeplog start <interval_min> <count>: deep sleep with timer wake; at each wake one gauge sample is
+// appended to the product NVS (survives anything), then straight back to sleep. sleeplog dump / stop.
+typedef struct {
+    uint32_t t_s;          // seconds since start (RTC timer, continuous across deep sleep)
+    uint16_t mv;
+    int16_t ma, ma_avg, standby_ma, temp_x10;
+    uint16_t rm_mah;
+} slog_sample_t;
+#define SLOG_MAX 64
+
+static esp_err_t slog_nvs(nvs_handle_t *h)
+{
+    esp_err_t err = nvs_flash_init_partition("nvs");
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) return err;
+    return nvs_open("sleeplog", NVS_READWRITE, h);
+}
+
+static void slog_take(nvs_handle_t h, int64_t start_us)
+{
+    slog_sample_t smp = {0};
+    kiban_gauge_t g;
+    if (kiban_gauge_read(&g) == ESP_OK) {
+        uint8_t b[2] = {0};
+        smp.mv = g.voltage_mv; smp.ma = g.current_ma; smp.ma_avg = g.avg_current_ma; smp.temp_x10 = g.temp_c_x10;
+        smp.rm_mah = g.remaining_mah;
+        (void)b;
+    }
+    smp.t_s = (uint32_t)((esp_rtc_get_time_us() - start_us) / 1000000);
+    static slog_sample_t buf[SLOG_MAX];
+    size_t len = sizeof buf;
+    if (nvs_get_blob(h, "samples", buf, &len) != ESP_OK) len = 0;
+    size_t n = len / sizeof(slog_sample_t);
+    if (n < SLOG_MAX) { buf[n++] = smp; nvs_set_blob(h, "samples", buf, n * sizeof(slog_sample_t)); }
+    nvs_commit(h);
+}
+
+// Called from probe_report_wake(): continue an active log after a timer wake.
+static void slog_continue(void)
+{
+    if (esp_reset_reason() != ESP_RST_DEEPSLEEP) return;
+    nvs_handle_t h;
+    if (slog_nvs(&h) != ESP_OK) return;
+    uint32_t left = 0, interval = 0;
+    int64_t start = 0;
+    if (nvs_get_u32(h, "left", &left) != ESP_OK || !left || nvs_get_u32(h, "interval", &interval) != ESP_OK ||
+        nvs_get_i64(h, "start", &start) != ESP_OK) { nvs_close(h); return; }
+    slog_take(h, start);
+    left--;
+    nvs_set_u32(h, "left", left);
+    nvs_commit(h);
+    nvs_close(h);
+    if (!left) { printf("sleeplog: finished\n"); return; }
+    kiban_power_prepare();
+    const kiban_wake_cfg_t w = {.timer_ms = interval * 1000, .power_key = true};
+    kiban_power_deep_sleep(&w);
+}
+
+static int cmd_sleeplog(int argc, char **argv)
+{
+    nvs_handle_t h;
+    esp_err_t err = slog_nvs(&h);
+    if (err != ESP_OK) { printf("nvs: %s\n", esp_err_to_name(err)); return 1; }
+    if (argc > 1 && !strcmp(argv[1], "dump")) {
+        static slog_sample_t buf[SLOG_MAX];
+        size_t len = sizeof buf;
+        uint32_t left = 0;
+        nvs_get_u32(h, "left", &left);
+        if (nvs_get_blob(h, "samples", buf, &len) != ESP_OK) len = 0;
+        printf("sleeplog: %u samples, %lu wakes left\n  t_min    mV     mA  avg_mA  RM_mAh  temp\n",
+               (unsigned)(len / sizeof(slog_sample_t)), (unsigned long)left);
+        for (size_t i = 0; i < len / sizeof(slog_sample_t); i++)
+            printf("  %5lu  %5u  %5d  %6d  %6u  %d.%d\n", (unsigned long)(buf[i].t_s / 60), buf[i].mv, buf[i].ma,
+                   buf[i].ma_avg, buf[i].rm_mah, buf[i].temp_x10 / 10, abs(buf[i].temp_x10 % 10));
+        nvs_close(h);
+        return 0;
+    }
+    if (argc > 1 && !strcmp(argv[1], "stop")) {
+        nvs_set_u32(h, "left", 0); nvs_commit(h); nvs_close(h);
+        printf("sleeplog stopped\n");
+        return 0;
+    }
+    if (argc > 3 && !strcmp(argv[1], "start")) {
+        const uint32_t interval_s = (uint32_t)atoi(argv[2]) * 60, count = (uint32_t)atoi(argv[3]);
+        const int64_t start = esp_rtc_get_time_us();
+        nvs_erase_key(h, "samples");
+        nvs_set_u32(h, "interval", interval_s);
+        nvs_set_u32(h, "left", count);
+        nvs_set_i64(h, "start", start);
+        slog_take(h, start);   // sample 0 before the first sleep
+        nvs_commit(h);
+        nvs_close(h);
+        printf("sleeplog: %lu wakes every %lu min; deep sleep now (unplug USB)\n", (unsigned long)count,
+               (unsigned long)(interval_s / 60));
+        fflush(stdout);
+        vTaskDelay(pdMS_TO_TICKS(100));
+        kiban_power_prepare();
+        const kiban_wake_cfg_t w = {.timer_ms = interval_s * 1000, .power_key = true};
+        kiban_power_deep_sleep(&w);
+    }
+    printf("usage: sleeplog start <interval_min> <count> | dump | stop\n");
+    nvs_close(h);
+    return 1;
+}
+
 // Start the PCF8563 countdown interrupt and watch candidate lines for a change.
 static int cmd_rtcint(int argc, char **argv)
 {
@@ -184,6 +293,7 @@ void probe_register_power_cmds(void)
     const esp_console_cmd_t cmds[] = {
         {.command = "sleep", .help = "sleep light|deep <ms> [key]", .func = cmd_sleep},
         {.command = "poweroff", .help = "poweroff [delay_s] [rtc_s]: hardware power-off test (5 s max, then deep sleep)", .func = cmd_poweroff},
+        {.command = "sleeplog", .help = "sleeplog start <interval_min> <count> | dump | stop", .func = cmd_sleeplog},
         {.command = "rtcint", .help = "rtcint [s]: arm the RTC countdown interrupt and watch where it shows up", .func = cmd_rtcint},
     };
     for (size_t i = 0; i < sizeof cmds / sizeof cmds[0]; i++) ESP_ERROR_CHECK(esp_console_cmd_register(&cmds[i]));
