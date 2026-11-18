@@ -340,3 +340,16 @@ chip** (ROM download mode, "Staying in bootloader"). With the expander unconfigu
 ESP32-S3 `[measured]`. Recovery is therefore always possible, even with a broken firmware that never drives P0.0:
 power off (or let it power off), hold AI, long-press POWER, flash over USB. Leaving download mode:
 `esptool --before no-reset --after watchdog-reset ...`.
+
+## Partition table v1 (plan B) applied
+
+Written: only `0x8000` (table, erase 0x8000–0x8FFF) and the probe at the new `ota_0` (`0x40000`); bootloader and
+`otadata` untouched.
+
+| Check | Result |
+|---|---|
+| Boot | The stock bootloader reads the new table and boots `ota_0` @ `0x40000`, image state VALID |
+| Product `nvs` @ `0x10000` (192K) | `nvs_flash_init_partition("nvs")` succeeded on the first call (the old `model` area was blank there); counter written and read back across calls; 6048 entries |
+| `assets` LittleFS @ `0xc40000` (3776K) | First mount: "corrupted dir pair" (old font data), formatted automatically; file append/read OK; 8 KB used |
+| `vendor_nvs` @ `0x9000` | Not byte-identical to the 2026-11-11 full backup. Entry-level diff (key names only): `reader/hs_days`, `reader/hs_sec` changed, `reader/rec1` added, `phy/cal_data` changed — all written by the stock firmware's reader and Wi-Fi while it was still in use after the backup `[inference]`; kiban never opens this partition. A private snapshot of the region was taken after the switch for future comparisons |
+| OTA | Running image copied to `ota_1` (1.56 MB), booted from `ota_1` @ `0x640000` (VALID), switched back to `ota_0` |

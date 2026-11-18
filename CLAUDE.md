@@ -19,8 +19,10 @@ Docs, code comments and commit messages in English. Conversation with the user i
 - ⛔ Charger (CX25601N): only `kiban_charger_apply()` / `kiban_charger_set_enabled()` write it (VREG, ICHG, EN_TERM,
   EN_CHG/HIZ/WDT). **VREG capped at 4200 mV** until the cell's rated charge voltage is confirmed; ICHG 480 mA default,
   max 960 mA; fail closed (user decisions 2026-11-18). No other charger register writes.
-- ⛔ Never `espefuse burn*`. esptool without `--baud 921600`. Do not overwrite the bootloader or partition
-  table without an explicit decision; flashing the device needs the user's go each time.
+- ⛔ Never `espefuse burn*`. esptool without `--baud 921600`. Never write the bootloader. The device runs the kiban
+  partition table v1 (`partitions/kiban_16mb_v1.csv`): apps go to `ota_0` @ `0x40000` (or `ota_1` @ `0x640000`), e.g.
+  `esptool --after watchdog-reset write-flash 0x40000 build/<app>.bin`. Never write `0x9000`–`0xCFFF` (`vendor_nvs`).
+  Changing the table needs an explicit decision.
 - The public API is the contract for both products: changing it requires stating the impact on bunko/manabu and bumping the version.
 - No product logic (layout, UI, content, playback policy).
 - Third-party repos are read-only references, shallow-cloned into `vendor/` (gitignored).

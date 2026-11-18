@@ -1,6 +1,6 @@
 # 003 · Partition table for kiban products (D1)
 
-Status: **plan B approved** (2026-11-18). Decision D1 (design/002 §6): products
+Status: **applied to the device** (2026-11-18; checks in research/003 "Partition table v1"). Decision D1 (design/002 §6): products
 get their own partition table with a product-owned NVS; the stock bootloader stays.
 
 ## 1. Constraints
