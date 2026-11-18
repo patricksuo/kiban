@@ -154,6 +154,12 @@ static int cmd_audio(int argc, char **argv)
         for (int i = 1; i <= n && i <= 20; i++) latency_once(i, vol > 30 ? 30 : vol);
         return 0;
     }
+    if (!strcmp(argv[1], "atw") && argc > 3) {   // atw <listen_ms> <CMD...>: send and listen longer
+        char cmd[96] = "";
+        for (int i = 3; i < argc; i++) { strlcat(cmd, argv[i], sizeof cmd); if (i + 1 < argc) strlcat(cmd, " ", sizeof cmd); }
+        kiban_audio_at(cmd, (uint32_t)atoi(argv[2]));
+        return 0;
+    }
     if (!strcmp(argv[1], "btone")) {   // tone over I2S with the speaker amplifier OFF (for a BT headset)
         const int hz = argc > 2 ? atoi(argv[2]) : 440, ms = argc > 3 ? atoi(argv[3]) : 2000;
         int vol = argc > 4 ? atoi(argv[4]) : 5;
