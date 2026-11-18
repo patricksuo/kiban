@@ -181,3 +181,79 @@ esp_err_t kiban_rtc_timer_off(void)
     ESP_RETURN_ON_ERROR(rd(KIBAN_RTC_ADDR, 0x01, &c2, 1), TAG, "ctrl2");
     return wr(KIBAN_RTC_ADDR, 0x01, (uint8_t)(c2 & ~0x1D));
 }
+
+// ---- BQ27220 configuration (design capacity) ----------------------------------------------------
+// Ported from FreeInk SDK (MIT, Free-Ink/freeink-sdk @e637713
+// libs/hardware/BatteryMonitor/src/BatteryMonitor.cpp:130-238), after TI TRM SLUUBD4A 6.1:
+// unseal, full access, CONFIG UPDATE, checksummed data-memory word writes, exit with reinit, seal.
+#define G_CONTROL     0x00
+#define G_FCC         0x12
+#define G_OPSTATUS    0x3A    // CFGUPDATE bit 10, SEC[1:0] bits 2:1
+#define G_DESIGN_CAP  0x3C
+#define G_MAC_CONTROL 0x3E
+#define G_MAC_DATA    0x40
+#define G_MAC_SUM     0x60    // checksum low byte, MACDataLen high byte
+#define DM_LEARNED_FCC 0x929D
+#define DM_DESIGN_CAP  0x929F
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+static esp_err_t gw16(uint8_t reg, uint16_t v)
+{
+    i2c_master_dev_handle_t h = dev_for(KIBAN_GAUGE_ADDR);
+    ESP_RETURN_ON_FALSE(h, ESP_ERR_INVALID_STATE, TAG, "gauge");
+    const uint8_t b[3] = {reg, (uint8_t)v, (uint8_t)(v >> 8)};   // one transaction per word
+    return i2c_master_transmit(h, b, 3, XFER_TIMEOUT_MS);
+}
+
+// Write one big-endian data-memory word, fixing the block checksum by the changed bytes.
+static esp_err_t dm_write_word(uint16_t address, uint16_t value)
+{
+    uint16_t old, sum;
+    ESP_RETURN_ON_ERROR(gw16(G_MAC_CONTROL, address), TAG, "select");
+    vTaskDelay(pdMS_TO_TICKS(10));
+    ESP_RETURN_ON_ERROR(g16(G_MAC_DATA, &old), TAG, "read word");
+    ESP_RETURN_ON_ERROR(g16(G_MAC_SUM, &sum), TAG, "read sum");
+    const uint16_t be = (uint16_t)((value >> 8) | (value << 8));
+    if (old == be) return ESP_OK;
+    sum = (uint16_t)((sum & 0xFF00) | (uint8_t)(sum + (old & 0xFF) + (old >> 8) - (value & 0xFF) - (value >> 8)));
+    ESP_RETURN_ON_ERROR(gw16(G_MAC_CONTROL, address), TAG, "reselect");   // reading the sum may advance the block
+    vTaskDelay(pdMS_TO_TICKS(10));
+    ESP_RETURN_ON_ERROR(gw16(G_MAC_DATA, be), TAG, "write word");
+    return gw16(G_MAC_SUM, sum);
+}
+
+esp_err_t kiban_gauge_set_design_capacity(uint16_t mah, bool force)
+{
+    uint16_t dc, st;
+    ESP_RETURN_ON_ERROR(g16(G_DESIGN_CAP, &dc), TAG, "design cap");
+    if (dc == mah) return ESP_OK;
+    if (dc != 3000 && !force) {
+        ESP_LOGW(TAG, "design capacity is %u mAh (not the TI default); not changing without force", dc);
+        return ESP_ERR_INVALID_STATE;
+    }
+    static const uint16_t unlock[] = {0x0414, 0x3672, 0xFFFF, 0xFFFF};
+    for (size_t i = 0; i < sizeof unlock / sizeof unlock[0]; i++) {
+        ESP_RETURN_ON_ERROR(gw16(G_CONTROL, unlock[i]), TAG, "unlock");
+        vTaskDelay(pdMS_TO_TICKS(1500));   // some BQ27220s ignore keys sent back to back
+    }
+    ESP_RETURN_ON_ERROR(gw16(G_CONTROL, 0x0090), TAG, "enter cfg update");
+    bool in_cfg = false;
+    for (int i = 0; i < 10 && !in_cfg; i++) {
+        vTaskDelay(pdMS_TO_TICKS(500));
+        in_cfg = g16(G_OPSTATUS, &st) == ESP_OK && (st & 0x0400);
+    }
+    esp_err_t err = in_cfg ? ESP_OK : ESP_ERR_TIMEOUT;
+    if (err == ESP_OK) err = dm_write_word(DM_LEARNED_FCC, mah);
+    if (err == ESP_OK) { vTaskDelay(pdMS_TO_TICKS(500)); err = dm_write_word(DM_DESIGN_CAP, mah); }
+    gw16(G_CONTROL, in_cfg ? 0x0091 : 0x0092);   // exit CONFIG UPDATE (with reinit after writes)
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    gw16(G_CONTROL, 0x0030);                     // seal
+    vTaskDelay(pdMS_TO_TICKS(100));
+    uint16_t after = 0;
+    g16(G_DESIGN_CAP, &after);
+    ESP_LOGI(TAG, "design capacity %u -> %u mAh (%s)", dc, after, esp_err_to_name(err));
+    if (err == ESP_OK && after != mah) err = ESP_ERR_INVALID_RESPONSE;
+    return err;
+}

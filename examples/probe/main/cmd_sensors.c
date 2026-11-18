@@ -11,8 +11,11 @@
 
 static int cmd_bat(int argc, char **argv)
 {
-    (void)argc; (void)argv;
     kiban_gauge_t g;
+    if (argc >= 3 && !strcmp(argv[1], "capacity")) {
+        esp_err_t e = kiban_gauge_set_design_capacity((uint16_t)atoi(argv[2]), argc > 3 && !strcmp(argv[3], "force"));
+        printf("set design capacity: %s\n", esp_err_to_name(e));
+    }
     esp_err_t err = kiban_gauge_read(&g);
     if (err != ESP_OK) { printf("gauge: %s\n", esp_err_to_name(err)); return 1; }
     printf("voltage %u mV  current %d mA (avg %d)  temp %d.%d C\n", g.voltage_mv, g.current_ma, g.avg_current_ma,
@@ -80,7 +83,7 @@ static int cmd_imu(int argc, char **argv)
 void probe_register_sensor_cmds(void)
 {
     const esp_console_cmd_t cmds[] = {
-        {.command = "bat", .help = "fuel gauge readings", .func = cmd_bat},
+        {.command = "bat", .help = "bat [capacity <mAh> [force]]: fuel gauge readings; optionally program design capacity", .func = cmd_bat},
         {.command = "chg", .help = "chg [vreg <mv>]: charger register dump and decode; vreg sets the termination voltage (capped at 4200)", .func = cmd_chg},
         {.command = "rtc", .help = "read the RTC", .func = cmd_rtc},
         {.command = "imu", .help = "imu [seconds]: accelerometer samples at 4 Hz", .func = cmd_imu},
