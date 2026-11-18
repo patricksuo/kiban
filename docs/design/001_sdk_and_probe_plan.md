@@ -155,4 +155,5 @@ Items that are known but not yet settled. Each has a trigger: the point at which
 | B1 | ~~Default of the USB mux (P0.0) with an unconfigured TCA9555~~ **Closed:** routes USB to the ESP32-S3; ROM download mode is reachable after a real power-off (research/003 B1) | — | — | — |
 | W1 | ~~HTTPS cross-signed chain~~ **Closed:** `CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY=y` (research/003 W1); required for `kiban_net` users | — | — | — |
 | W2 | lwIP TCP receive window (~5.7 KB default) limits throughput on long-RTT paths | Download speed from distant servers | Raise `CONFIG_LWIP_TCP_WND_DEFAULT` / receive mailbox (PSRAM is available) and measure | Product download implementation |
+| A1 | BT audio module mode 2 (headset) gets no replies | Bluetooth headphones | Wait for the vendor (model / AT docs); or try mode 2 under the stock firmware | A product feature that needs headphones |
 | B2 | Intermittent USB enumeration on the Mac (cable orientation suspected) | Development friction only | Note conditions each time it happens | — |

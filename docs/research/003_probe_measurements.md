@@ -365,3 +365,12 @@ that top certificate `[source] esp_crt_bundle.c:315-363`. Fix: `CONFIG_MBEDTLS_C
 |---|---|
 | HTTPS GET 1 MB from the CDN node, with the option | 200, 1 000 000 bytes in 4.6 s (212 KB/s, includes the TLS handshake) |
 | Plain HTTP, same node, same session | 398 and 394 KB/s |
+
+## BT audio module · headset (mode 2) — skipped
+
+Vendor sequence for "mode 2" (module as Bluetooth source to a headset): `AT+TX=1`, ~700 ms, `AT+MODE=2` (expects
+`SET MODE 2`), then `AT+INQUIRING` / `AT+CONNECT=<addr>` `[source] bluetooth_uart.cc:198-205, bluetooth_screen.cc:133,245`.
+On this unit `AT+TX=1` is echoed, but `AT+MODE=2` and `AT+INQUIRING` get **no reply at all** (not even `AT ERROR`),
+with gaps of 0.8 s, 2 s and 5 s; mode-1 commands keep working in the same session. Whether the module supports mode 2
+at all is unknown (vendor asked about the module model / AT documentation in issue #4). Not needed by either product
+for now; skipped (user, 2026-11-18). Possible diagnostic later: restore the stock firmware and try its Bluetooth page.
