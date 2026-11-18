@@ -303,3 +303,18 @@ not recorded.
 
 Nearby 2.4 GHz devices are received strongly, so the antenna path works; the weak Wi-Fi RSSI is mostly distance to the
 access point, with the laptop's better antenna adding margin `[inference]`.
+
+## Wi-Fi connection and throughput
+
+Credentials are entered by the user (a script run by the user reads them from a local file and masks them in all
+output); the probe keeps them in RAM only (`WIFI_STORAGE_RAM`, no NVS). Network names and addresses are not recorded.
+
+| Item | Result |
+|---|---|
+| Home AP (WPA/WPA2, 802.11n, channel 6; 2–3 APs with the same name) | Seen at −75 to −82 dBm from the test spot |
+| Join | First attempt, IP after 4.6–5.3 s (the first-ever attempt failed with reason 4 before PMF/SAE and retries were enabled) |
+| Link while connected | Stable for minutes; RSSI −73 to −84 dBm |
+| HTTP download, 1 MB from a nearby CDN node (TCP connect 14 ms) | 510, 419, 375 KB/s (3–4 Mbit/s) with lwIP defaults |
+| HTTP download, 1 MB from a UK server (TCP connect ~300 ms) | 13 KB/s: bound by the default TCP receive window (~5.7 KB) over a long RTT, not by the radio `[inference]` |
+| HTTPS to that CDN (chain: leaf → GTS WE1 → GTS Root R4 cross-signed by GlobalSign Root CA) | `esp-x509-crt-bundle: Failed to verify certificate` (-0x3000) with the full IDF bundle, SHA-384 and P-384 enabled, no date check. Suspected cross-signed-chain handling `[inference]`; tracked as W1 in design/001 §8 |
+| Console task stack | 4 KB default overflowed during the TLS handshake (silent reboot); 16 KB works |
