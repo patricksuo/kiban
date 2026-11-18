@@ -271,3 +271,20 @@ actual; its default is 1000 mA = 960 mA actual, `[source] metalio_board_periph.c
 | Idempotent boot | Next boot reports "already set" and only confirms charging is enabled |
 | Charger state vs. current | With the cell at 4300 mV (above VREG 4200) and USB attached, CHRG_STAT reads 1 ("pre-charge / CC") while the gauge shows −45 mA: the system draws from the cell. "Charging" therefore requires CHRG_STAT ≥ 1 **and** current flowing in |
 | 0x1A | `0xbd`; bit 7 set by the vendor init (meaning unknown without a datasheet; possibly an NTC-ignore bit `[to-verify]`). kiban does not write it; a temperature gate (0–45 °C on the gauge temperature) is applied in software |
+
+## Wi-Fi (scan only)
+
+Wi-Fi NVS and PHY calibration storage are disabled (`CONFIG_ESP_WIFI_NVS_ENABLED=n`,
+`CONFIG_ESP_PHY_CALIBRATION_AND_DATA_STORAGE=n`); the stock NVS partition is not touched. SSIDs and BSSIDs are not
+recorded (public repo).
+
+| Item | Result |
+|---|---|
+| Init (STA, no NVS) | 63 ms; ~264 KB internal heap free afterwards |
+| Active scan, all channels | ~2.5 s; 8 and 11 APs in two scans, 2.4 GHz channels 1, 3, 6, 11 |
+| Strongest AP seen by the device | −77 to −82 dBm (channel 6) |
+| Same place, a MacBook | Its connected 2.4 GHz AP (channel 6) at −64 dBm |
+
+The device receives about 13–18 dB less than the laptop at the same spot `[measured]`, single location and orientation.
+Plausible causes: metal housing, small antenna, placement `[inference]`. Products should treat Wi-Fi as weak and
+intermittent (download, then work offline). Connection throughput not measured yet.
