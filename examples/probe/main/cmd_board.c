@@ -10,6 +10,7 @@
 #include "freertos/task.h"
 #include "kiban/board.h"
 #include "kiban/ioexp.h"
+#include "kiban/keys.h"
 #include "probe_cmds.h"
 
 static const struct { uint8_t addr; const char *name; } KNOWN[] = {
@@ -80,30 +81,24 @@ static int cmd_rail(int argc, char **argv)
     return err == ESP_OK ? 0 : 1;
 }
 
-// Print raw key levels whenever they change, for N seconds (default 10).
+// keys [seconds]: print debounced key events from kiban_keys (POWER, AI, VOL+/-, cover keys).
 static int cmd_keys(int argc, char **argv)
 {
     int secs = argc > 1 ? atoi(argv[1]) : 10;
     if (secs <= 0 || secs > 120) secs = 10;
-    const gpio_config_t in = {.pin_bit_mask = (1ULL << KIBAN_PIN_BOOT_KEY) | (1ULL << KIBAN_PIN_POWER_KEY),
-                              .mode = GPIO_MODE_INPUT, .pull_up_en = GPIO_PULLUP_ENABLE}; // GPIO0 has no external pull-up
-    gpio_config(&in);
-    printf("watching BOOT(GPIO0) POWER(GPIO3) VOL-(P0.7) VOL+(P1.0) for %d s; raw levels, 1=high\n", secs);
-    int last = -1;
-    const int64_t end = esp_timer_get_time() + (int64_t)secs * 1000000;
+    static const char *NAME[] = {"POWER", "AI", "VOL+", "VOL-", "COVER_LEFT", "COVER_MIDDLE", "COVER_RIGHT"};
+    static const char *ACT[] = {"press", "long", "release"};
+    esp_err_t err = kiban_keys_init(NULL);
+    if (err != ESP_OK) { printf("keys init: %s\n", esp_err_to_name(err)); return 1; }
+    printf("watching keys for %d s\n", secs);
+    const int64_t t0 = esp_timer_get_time(), end = t0 + (int64_t)secs * 1000000;
     while (esp_timer_get_time() < end) {
-        uint16_t in16 = 0xFFFF;
-        bool ok = kiban_ioexp_read16(KIBAN_IOEXP_REG_INPUT, &in16) == ESP_OK;
-        int state = (gpio_get_level(KIBAN_PIN_BOOT_KEY) << 0) | (gpio_get_level(KIBAN_PIN_POWER_KEY) << 1) |
-                    (((in16 >> KIBAN_IOEXP_VOL_DOWN) & 1) << 2) | (((in16 >> KIBAN_IOEXP_VOL_UP) & 1) << 3) |
-                    ((ok ? 0 : 1) << 4);
-        if (state != last) {
-            printf("t=%6lld ms  BOOT=%d POWER=%d VOL-=%d VOL+=%d%s\n",
-                   (long long)((esp_timer_get_time() - (end - (int64_t)secs * 1000000)) / 1000),
-                   state & 1, (state >> 1) & 1, (state >> 2) & 1, (state >> 3) & 1, ok ? "" : "  (expander read failed)");
-            last = state;
-        }
-        vTaskDelay(pdMS_TO_TICKS(20));
+        kiban_key_event_t ev[8];
+        const size_t n = kiban_keys_poll(esp_timer_get_time(), ev, 8);
+        for (size_t i = 0; i < n; i++)
+            printf("t=%6lld ms  %-12s %s%s\n", (long long)((ev[i].t_us - t0) / 1000), NAME[ev[i].key], ACT[ev[i].action],
+                   ev[i].after_long ? " (after long)" : "");
+        vTaskDelay(pdMS_TO_TICKS(15));
     }
     return 0;
 }
@@ -114,7 +109,7 @@ void probe_register_board_cmds(void)
         {.command = "i2c_scan", .help = "probe all 7-bit I2C addresses", .func = cmd_i2c_scan},
         {.command = "ioexp", .help = "dump TCA9555 registers", .func = cmd_ioexp},
         {.command = "rail", .help = "rail <main|panel> <on|off>", .func = cmd_rail},
-        {.command = "keys", .help = "keys [seconds]: print raw key levels on change", .func = cmd_keys},
+        {.command = "keys", .help = "keys [seconds]: print debounced key events", .func = cmd_keys},
     };
     for (size_t i = 0; i < sizeof cmds / sizeof cmds[0]; i++) ESP_ERROR_CHECK(esp_console_cmd_register(&cmds[i]));
 }

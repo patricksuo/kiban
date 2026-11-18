@@ -6,6 +6,7 @@
 #include "driver/gpio.h"
 #include "esp_check.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "kiban/ioexp.h"
@@ -16,6 +17,7 @@ static const char *TAG = "kiban.board";
 static i2c_master_bus_handle_t s_bus;
 static uint32_t s_i2c_hz = 400000;
 static bool s_charger_ok;
+static kiban_board_boot_info_t s_boot;
 
 #define PIN_BIT(n) ((uint16_t)1u << (n))
 
@@ -27,6 +29,7 @@ static const uint16_t OUTPUTS = PIN_BIT(KIBAN_IOEXP_USB_MUX_SEL) | PIN_BIT(KIBAN
 i2c_master_bus_handle_t kiban_board_i2c(void) { return s_bus; }
 uint32_t kiban_board_i2c_hz(void) { return s_i2c_hz; }
 bool kiban_board_charger_ok(void) { return s_charger_ok; }
+kiban_board_boot_info_t kiban_board_boot_info(void) { return s_boot; }
 
 esp_err_t kiban_board_rail_set(kiban_rail_t rail, bool on)
 {
@@ -65,6 +68,8 @@ esp_err_t kiban_board_init(const kiban_board_cfg_t *cfg)
     ESP_RETURN_ON_ERROR(kiban_ioexp_read16(KIBAN_IOEXP_REG_OUTPUT, &latch), TAG, "latch");
     ESP_RETURN_ON_ERROR(kiban_ioexp_read16(KIBAN_IOEXP_REG_CONFIG, &conf), TAG, "config");
     ESP_LOGI(TAG, "expander before init: output=0x%04x config=0x%04x", latch, conf);
+    s_boot = (kiban_board_boot_info_t){.reset_reason = (int)esp_reset_reason(), .ioexp_output = latch,
+                                       .ioexp_config = conf, .ioexp_valid = true};
 
     // 1) Levels first. USB mux -> ESP, PA switch -> ESP, amp off, main rail on,
     //    power-off pulse line idle high, touch in reset, panel/SD rail off until step 3.

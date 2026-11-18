@@ -16,21 +16,12 @@
 static const char *EV[] = {"down", "up", "contact", "none"};
 
 // ---- drawing in portrait coordinates -------------------------------------------------------
-// Measured (research/003 P2): portrait (px, py) with the cover keys at the bottom maps to the
-// 800x480 frame as fx = py, fy = 479 - px. Frame bit = 1 is white, MSB = leftmost pixel.
-#define PW 480
-#define PH 800
+#define PW KIBAN_EPD_PORTRAIT_W
+#define PH KIBAN_EPD_PORTRAIT_H
 
 static uint8_t *s_fb;
 
-static void px_set(int px, int py, bool black)
-{
-    if (px < 0 || px >= PW || py < 0 || py >= PH) return;
-    const int fx = py, fy = (PW - 1) - px;
-    uint8_t *b = &s_fb[fy * (KIBAN_EPD_WIDTH / 8) + fx / 8];
-    const uint8_t m = (uint8_t)(0x80 >> (fx % 8));
-    if (black) *b &= (uint8_t)~m; else *b |= m;
-}
+static void px_set(int px, int py, bool black) { kiban_epd_portrait_px(s_fb, px, py, black); }
 
 static void rect(int x0, int y0, int x1, int y1)
 {

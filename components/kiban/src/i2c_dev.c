@@ -63,3 +63,14 @@ esp_err_t kiban_i2c_wr16(uint8_t addr, uint8_t reg, uint16_t val)
     const uint8_t b[3] = {reg, (uint8_t)val, (uint8_t)(val >> 8)};
     return i2c_master_transmit(h, b, 3, KIBAN_I2C_XFER_TIMEOUT_MS);
 }
+
+esp_err_t kiban_i2c_wr_buf(uint8_t addr, uint8_t reg, const uint8_t *data, size_t n)
+{
+    ESP_RETURN_ON_FALSE(n <= 15, ESP_ERR_INVALID_ARG, TAG, "too long");
+    i2c_master_dev_handle_t h = dev_for(addr);
+    ESP_RETURN_ON_FALSE(h, ESP_ERR_INVALID_STATE, TAG, "no device 0x%02x", addr);
+    uint8_t b[16];
+    b[0] = reg;
+    for (size_t i = 0; i < n; i++) b[1 + i] = data[i];
+    return i2c_master_transmit(h, b, n + 1, KIBAN_I2C_XFER_TIMEOUT_MS);
+}

@@ -67,19 +67,38 @@ esp_err_t kiban_rtc_get(kiban_rtc_time_t *o)
     return ESP_OK;
 }
 
-// PCF8563: 0x01 Control_status_2 TIE=bit0 TF=bit2, 0x0E Timer_control TE=bit7 TD[1:0]=10 (1 Hz),
-// 0x0F Timer value. INT is open-drain, active low.
-esp_err_t kiban_rtc_timer_irq(uint8_t seconds)
+static uint8_t to_bcd(int v) { return (uint8_t)(((v / 10) << 4) | (v % 10)); }
+
+esp_err_t kiban_rtc_set(const kiban_rtc_time_t *t)
 {
+    ESP_RETURN_ON_FALSE(t && t->year >= 2000 && t->year <= 2099 && t->month >= 1 && t->month <= 12 && t->day >= 1 &&
+                            t->day <= 31 && t->hour >= 0 && t->hour < 24 && t->minute >= 0 && t->minute < 60 &&
+                            t->second >= 0 && t->second < 60 && t->weekday >= 0 && t->weekday < 7,
+                        ESP_ERR_INVALID_ARG, TAG, "bad time");
+    // One burst from 0x02 so the clock cannot roll over between registers.
+    const uint8_t b[7] = {to_bcd(t->second) /* VL = 0 */, to_bcd(t->minute), to_bcd(t->hour), to_bcd(t->day),
+                          (uint8_t)t->weekday, to_bcd(t->month) /* century bit 0 = 20xx */, to_bcd(t->year - 2000)};
+    return kiban_i2c_wr_buf(KIBAN_RTC_ADDR, 0x02, b, sizeof b);
+}
+
+// PCF8563: 0x01 Control_status_2 TIE=bit0 TF=bit2, 0x0E Timer_control TE=bit7 TD[1:0] (10 = 1 Hz,
+// 11 = 1/60 Hz), 0x0F Timer value. INT is open-drain, active low.
+esp_err_t kiban_rtc_wake_after(uint32_t seconds)
+{
+    uint8_t td, value;
+    if (seconds == 0) return ESP_ERR_INVALID_ARG;
+    if (seconds <= 255) { td = 0x02; value = (uint8_t)seconds; }
+    else if ((seconds + 59) / 60 <= 255) { td = 0x03; value = (uint8_t)((seconds + 59) / 60); }
+    else return ESP_ERR_INVALID_ARG;
     uint8_t c2;
     ESP_RETURN_ON_ERROR(kiban_i2c_wr(KIBAN_RTC_ADDR, 0x0E, 0x00), TAG, "timer off");
     ESP_RETURN_ON_ERROR(kiban_i2c_rd(KIBAN_RTC_ADDR, 0x01, &c2, 1), TAG, "ctrl2");
     ESP_RETURN_ON_ERROR(kiban_i2c_wr(KIBAN_RTC_ADDR, 0x01, (uint8_t)((c2 & ~0x1C) | 0x01)), TAG, "TIE");
-    ESP_RETURN_ON_ERROR(kiban_i2c_wr(KIBAN_RTC_ADDR, 0x0F, seconds), TAG, "timer value");
-    return kiban_i2c_wr(KIBAN_RTC_ADDR, 0x0E, 0x82);
+    ESP_RETURN_ON_ERROR(kiban_i2c_wr(KIBAN_RTC_ADDR, 0x0F, value), TAG, "timer value");
+    return kiban_i2c_wr(KIBAN_RTC_ADDR, 0x0E, (uint8_t)(0x80 | td));
 }
 
-esp_err_t kiban_rtc_timer_off(void)
+esp_err_t kiban_rtc_wake_cancel(void)
 {
     uint8_t c2;
     ESP_RETURN_ON_ERROR(kiban_i2c_wr(KIBAN_RTC_ADDR, 0x0E, 0x00), TAG, "timer off");

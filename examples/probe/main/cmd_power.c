@@ -30,6 +30,8 @@ static RTC_DATA_ATTR uint32_t s_deep_asked_ms;
 // Power-off test record: stage 1 = pulsing started, 2 = power stayed on, fell back to deep sleep.
 typedef struct { uint32_t magic; int stage; } off_rec_t;
 static RTC_NOINIT_ATTR off_rec_t s_off;
+typedef struct { uint32_t magic; uint16_t out, cfg; } por_rec_t;
+static RTC_NOINIT_ATTR por_rec_t s_por;   // expander state seen at the last power-on boot (open item B1)
 
 // Full-screen markers drawn directly in the 800x480 frame (orientation irrelevant).
 static void draw_marker(bool off_screen)
@@ -76,6 +78,12 @@ void probe_report_wake(void)
     if (s_deep.magic == MAGIC)
         printf("last deep sleep: asked %lld ms, slept %lld ms, cause %s\n", (long long)s_deep.asked_ms,
                (long long)s_deep.slept_ms, cause_name(s_deep.cause));
+    const kiban_board_boot_info_t bi = kiban_board_boot_info();
+    if (esp_reset_reason() == ESP_RST_POWERON && bi.ioexp_valid)
+        s_por = (por_rec_t){.magic = MAGIC, .out = bi.ioexp_output, .cfg = bi.ioexp_config};
+    if (s_por.magic == MAGIC)
+        printf("last power-on boot: expander output 0x%04x config 0x%04x (%s)\n", s_por.out, s_por.cfg,
+               s_por.cfg == 0xffff ? "power-on default: the TCA9555 lost power" : "state kept across power-off");
     if (esp_reset_reason() == ESP_RST_POWERON) {
         printf("power-on reset: the board was really off (or first power). Drawing the checkerboard marker.\n");
         draw_marker(false);
@@ -85,7 +93,7 @@ void probe_report_wake(void)
                                                       : "pulsing started, no fallback recorded");
         s_off.magic = 0;
     }
-    kiban_rtc_timer_off();   // clear any armed RTC countdown / pending INT
+    kiban_rtc_wake_cancel();   // clear any armed RTC countdown / pending INT
     if (s_light.magic == MAGIC)
         printf("last light sleep: asked %lld ms, slept %lld ms, cause %s\n", (long long)s_light.asked_ms,
                (long long)s_light.slept_ms, cause_name(s_light.cause));
@@ -129,7 +137,7 @@ static int cmd_poweroff(int argc, char **argv)
     printf("poweroff: OFF marker, delay %d s, RTC countdown %d s\n", delay_s, rtc_s);
     draw_marker(true);
     for (int i = delay_s; i > 0; i--) { printf("  %d\n", i); vTaskDelay(pdMS_TO_TICKS(1000)); }
-    if (rtc_s > 0) kiban_rtc_timer_irq((uint8_t)(rtc_s > 255 ? 255 : rtc_s));
+    if (rtc_s > 0) kiban_rtc_wake_after((uint32_t)rtc_s);
     kiban_power_quiesce();
     s_off = (off_rec_t){.magic = MAGIC, .stage = 1};
     kiban_power_off(5000);
@@ -147,7 +155,7 @@ static int cmd_rtcint(int argc, char **argv)
     const int secs = argc > 1 ? atoi(argv[1]) : 5;
     const gpio_config_t in = {.pin_bit_mask = (1ULL << KIBAN_PIN_POWER_KEY), .mode = GPIO_MODE_INPUT};
     gpio_config(&in);
-    esp_err_t err = kiban_rtc_timer_irq((uint8_t)secs);
+    esp_err_t err = kiban_rtc_wake_after((uint32_t)secs);
     if (err != ESP_OK) { printf("rtc: %s\n", esp_err_to_name(err)); return 1; }
     printf("RTC countdown %d s armed; watching expander inputs, GPIO1 (touch INT), GPIO2 (expander INT), GPIO3 (POWER)\n", secs);
     const int64_t t0 = esp_timer_get_time(), end = t0 + (int64_t)(secs + 5) * 1000000;
@@ -165,7 +173,7 @@ static int cmd_rtcint(int argc, char **argv)
         }
         vTaskDelay(pdMS_TO_TICKS(20));
     }
-    kiban_rtc_timer_off();
+    kiban_rtc_wake_cancel();
     printf("RTC timer off\n");
     return 0;
 }

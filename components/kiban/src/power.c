@@ -9,6 +9,9 @@
 #include "kiban/audio.h"
 #include "kiban/board.h"
 #include "kiban/touch.h"
+#include "kiban/epd.h"
+#include "kiban/sdcard.h"
+#include "kiban/sensors.h"
 #include "kiban/ioexp.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -70,4 +73,27 @@ esp_err_t kiban_power_off(uint32_t max_ms)
     kiban_ioexp_set(KIBAN_IOEXP_PWR_KEY_PULSE, true);   // back to idle high
     ESP_LOGW(TAG, "power off: still running after %lu ms (external power present?)", (unsigned long)max_ms);
     return ESP_ERR_TIMEOUT;
+}
+
+esp_err_t kiban_power_prepare(void)
+{
+    kiban_audio_close();                      // amp off first, then I2S / UART
+    if (kiban_epd_ready()) kiban_epd_sleep();
+    kiban_sd_unmount();
+    gpio_set_level(KIBAN_PIN_MOTOR, 0);
+    return kiban_power_quiesce();
+}
+
+void kiban_power_off_for(uint32_t seconds)
+{
+    kiban_power_prepare();
+    if (seconds) {
+        esp_err_t err = kiban_rtc_wake_after(seconds);
+        if (err != ESP_OK) ESP_LOGE(TAG, "RTC wake not armed (%s)", esp_err_to_name(err));
+    } else {
+        kiban_rtc_wake_cancel();
+    }
+    kiban_power_off(5000);
+    const kiban_wake_cfg_t w = {.timer_ms = seconds ? seconds * 1000 : 0, .power_key = true};
+    kiban_power_deep_sleep(&w);
 }

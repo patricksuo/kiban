@@ -542,3 +542,5 @@ esp_err_t kiban_epd_deinit(void)
 }
 
 kiban_epd_stats_t kiban_epd_last_stats(void) { return s.stats; }
+
+bool kiban_epd_ready(void) { return s.ready; }

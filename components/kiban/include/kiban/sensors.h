@@ -42,10 +42,15 @@ typedef struct {
 } kiban_rtc_time_t;
 
 esp_err_t kiban_rtc_get(kiban_rtc_time_t *out);
-// Countdown timer interrupt after `seconds` (1 Hz source). The INT line reaches the power-switch chip:
-// armed before kiban_power_off(), it powers the board back on [measured] research/003 P7.
-esp_err_t kiban_rtc_timer_irq(uint8_t seconds);
-esp_err_t kiban_rtc_timer_off(void);
+// Set the clock (store UTC by convention; 2000..2099). Clears the VL "integrity lost" flag.
+esp_err_t kiban_rtc_set(const kiban_rtc_time_t *t);
+
+// Countdown interrupt after `seconds`: 1 Hz source up to 255 s, 1/60 Hz source (minute resolution,
+// rounded up; the first minute may be short) up to 255 min. The INT line reaches the power-switch chip:
+// armed before kiban_power_off(), it powers the board back on [measured] research/003 P7 (1 Hz path).
+// Returns ESP_ERR_INVALID_ARG beyond 255 min.
+esp_err_t kiban_rtc_wake_after(uint32_t seconds);
+esp_err_t kiban_rtc_wake_cancel(void);   // stop the countdown and clear a pending interrupt
 
 typedef struct { int16_t x_mg, y_mg, z_mg; } kiban_imu_sample_t;
 

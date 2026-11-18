@@ -82,6 +82,23 @@ esp_err_t kiban_epd_show_gray(const uint8_t *fb2, uint32_t timeout_ms);
 // The image stays on the glass. kiban_epd_init() is required before the next refresh.
 esp_err_t kiban_epd_sleep(void);
 
+// True after a successful kiban_epd_init() and until sleep / deinit / a timeout.
+bool kiban_epd_ready(void);
+
+// Portrait helpers. Measured (research/003 P2): with the device held portrait and the cover keys at the
+// bottom, portrait (px, py) maps to the 800x480 frame as fx = py, fy = 479 - px. Frame bit 1 = white,
+// MSB = leftmost pixel. Touch coordinates use the same portrait frame (research/003 P3).
+#define KIBAN_EPD_PORTRAIT_W 480
+#define KIBAN_EPD_PORTRAIT_H 800
+static inline void kiban_epd_portrait_px(uint8_t *fb, int px, int py, bool black)
+{
+    if (px < 0 || px >= KIBAN_EPD_PORTRAIT_W || py < 0 || py >= KIBAN_EPD_PORTRAIT_H) return;
+    const int fx = py, fy = (KIBAN_EPD_PORTRAIT_W - 1) - px;
+    uint8_t *b = &fb[fy * (KIBAN_EPD_WIDTH / 8) + fx / 8];
+    const uint8_t m = (uint8_t)(0x80 >> (fx % 8));
+    if (black) *b &= (uint8_t)~m; else *b |= m;
+}
+
 // Stats of the last refresh (for show_gray: the gray pass; the base pass is logged).
 kiban_epd_stats_t kiban_epd_last_stats(void);
 

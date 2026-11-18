@@ -9,4 +9,5 @@
 
 esp_err_t kiban_i2c_rd(uint8_t addr, uint8_t reg, uint8_t *buf, size_t n);
 esp_err_t kiban_i2c_wr(uint8_t addr, uint8_t reg, uint8_t val);
+esp_err_t kiban_i2c_wr_buf(uint8_t addr, uint8_t reg, const uint8_t *data, size_t n);   // n <= 15
 esp_err_t kiban_i2c_wr16(uint8_t addr, uint8_t reg, uint16_t val);   // little-endian word, one transaction

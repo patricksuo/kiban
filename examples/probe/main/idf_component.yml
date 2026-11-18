@@ -2,3 +2,5 @@ dependencies:
   idf: ">=6.0"
   kiban:
     path: ../../../components/kiban
+  kiban_net:
+    path: ../../../components/kiban_net

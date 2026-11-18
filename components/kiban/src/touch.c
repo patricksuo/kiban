@@ -69,3 +69,12 @@ esp_err_t kiban_touch_reset(void)
     vTaskDelay(pdMS_TO_TICKS(120));
     return ESP_OK;
 }
+
+kiban_cover_key_t kiban_touch_cover_key(uint16_t x, uint16_t y)
+{
+    if (y < 850 || y > 950) return KIBAN_COVER_NONE;
+    if (x == 80) return KIBAN_COVER_LEFT;
+    if (x == 400) return KIBAN_COVER_MIDDLE;
+    if (x == 240) return KIBAN_COVER_RIGHT;
+    return KIBAN_COVER_NONE;
+}

@@ -28,6 +28,14 @@ typedef struct {
     uint16_t y;             // native portrait, 0..799 on the panel; larger = cover key area
 } kiban_touch_point_t;
 
+// Cover keys (the printed areas below the panel), named by physical position. Each reports a fixed
+// coordinate while held [measured] research/003 P3: LEFT (80,900), MIDDLE (400,900), RIGHT (240,900);
+// the vendor source comments swap MIDDLE and RIGHT. Their meaning (home / previous / next) is product policy.
+typedef enum { KIBAN_COVER_NONE = 0, KIBAN_COVER_LEFT, KIBAN_COVER_MIDDLE, KIBAN_COVER_RIGHT } kiban_cover_key_t;
+kiban_cover_key_t kiban_touch_cover_key(uint16_t x, uint16_t y);
+
+// Finger taps land about +15..+22 px below the aimed point (y) [measured]; not corrected here.
+
 // Requires kiban_board_init() (I2C bus up, touch reset released). Does not read a chip ID:
 // the CST816S may NACK while nothing touches it.
 esp_err_t kiban_touch_init(void);

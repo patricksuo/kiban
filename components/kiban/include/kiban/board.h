@@ -50,6 +50,16 @@ esp_err_t kiban_board_init(const kiban_board_cfg_t *cfg);
 i2c_master_bus_handle_t kiban_board_i2c(void);
 uint32_t kiban_board_i2c_hz(void);
 bool kiban_board_charger_ok(void);
+
+// Captured by kiban_board_init() before it touches the expander: shows whether the TCA9555 kept its state
+// (output/config differ from the power-on default 0xffff) across the last power-off (open item B1).
+typedef struct {
+    int reset_reason;           // esp_reset_reason()
+    uint16_t ioexp_output;      // TCA9555 output latch before init
+    uint16_t ioexp_config;      // TCA9555 config before init
+    bool ioexp_valid;
+} kiban_board_boot_info_t;
+kiban_board_boot_info_t kiban_board_boot_info(void);
 esp_err_t kiban_board_rail_set(kiban_rail_t rail, bool on);
 
 #ifdef __cplusplus
