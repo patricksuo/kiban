@@ -153,3 +153,17 @@ Still open: 4, 5, 7 — tracked as E1, E2, E3 in design/001 §8.
    the two middle bands come out swapped or indistinguishable, the encoding or VSH1 needs revisiting.
 7. **Sleep**: deep sleep mode `0x10=0x01` (vendor value, never called by the vendor UI). Mode 1 is documented to keep
    RAM `[inference]`; kiban still requires a non-partial refresh after `kiban_epd_init()`.
+
+## P4 · Gauge, charger, RTC, accelerometer
+
+All read-only except the accelerometer configuration (CTRL_REG1/4). USB plugged in, device lying screen up.
+
+| Item | Result |
+|---|---|
+| BQ27220 | 4379 mV, +6 mA, 26.0 °C, SOC 100 %, remaining/full/design **3000/3000/3000 mAh**, cycles 0, SOH 100 %, BatteryStatus 0x5268 |
+| BQ27220 configuration | Design capacity 3000 mAh and ChargingVoltage 4200 mV are the chip's defaults; the cell is listed as 1000 mAh `[community]` comparisontabl.es. **The gauge is unconfigured, so its SOC / capacity figures are not meaningful** (consistent with research/001: the vendor only uses voltage and current) |
+| CX25601N (programmed by the stock firmware, persists while powered) | **VREG 4400 mV**, ICHG 960 mA, IINDPM 960 mA, VBUS_STAT "none" (D+/D− detection off, see research/001), CHRG_STAT CV |
+| CX25601N raw 0x00–0x3F | `ff ff 00 03 c0 0d 00 03 60 0e 20 03 c0 0f 00 0b / c0 00 30 00 03 1c a0 4f 00 c0 bd 25 3f 00 10 00 / 1d 08 a0 1c 08 00 30 04 00 … / 00 … 02 00 10 01 00 …` (0x38 part info = 0x02) |
+| Cell voltage under charge | **4379 mV**, i.e. above 4.2 V. Safe only if the cell is a 4.35/4.4 V (LiHV) type. The cell rating is still unknown; the only public figure is "3.7 V nominal, 1000 mAh" `[community]`, which usually indicates a 4.2 V cell but is not authoritative |
+| PCF8563 | Reads 2265-11-07 09:37:08 with the VL flag set: time not valid (never set or lost power) |
+| SC7A20H | WHO_AM_I 0x11; lying flat: x ≈ −2..−15, y ≈ −17..−27, z ≈ −1000 mg (first sample −765 while settling) |
