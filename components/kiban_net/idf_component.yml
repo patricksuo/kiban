@@ -1,8 +1,6 @@
 version: "0.2.0"
-description: Optional networking for kiban products (Wi-Fi STA without NVS, HTTP(S) download with resume, SNTP). Pure C.
+description: Optional networking for kiban products (Wi-Fi STA without NVS, HTTP(S) download with resume, SNTP). Pure C. Products must also depend on the kiban component at the same version.
 url: https://github.com/patricksuo/kiban
 license: MIT
 dependencies:
   idf: ">=6.0"
-  kiban:
-    path: ../kiban
