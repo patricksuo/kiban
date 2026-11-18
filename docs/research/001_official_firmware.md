@@ -367,8 +367,11 @@ PowerHw: PWR_KEY_PULSE
 HeapCheck: OK: internal RAM + PSRAM integrity        <- ~2 s later, the ESP32 is still running
 ```
 
-This matches scenario A: the 30-minute standby auto power-off fired with USB attached, the power-off pulses did not cut
-power, and the firmware stayed in `PwrOffTask`. The same log shows the charger "recharge kick" running every ~2.7 s
+Interpretation, revised after P7 (research/003): on this unit, P1.3 pulses cut power within ~2 s **even with USB
+attached**, and the log ends right after the line written ~1.9 s after the first pulse. So the log is consistent with a
+**successful automatic power-off** after 30 minutes of standby, not with a firmware stuck in `PwrOffTask`
+`[inference]`. What made the user's power-on attempts fail that night (a 3 s press boots the unit after the same kind of
+power-off in our test) remains open. The same log shows the charger "recharge kick" running every ~2.7 s
 (`vbat=4278mV < VREG=4400mV`, status "not charging / full" each time) while the UI showed 95 %.
 
 A separate core dump on the card (`metalio_coredump.elf`, ESP-IDF core dump with a 24-byte header) records a crash with

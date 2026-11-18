@@ -71,6 +71,7 @@ esp_err_t kiban_gauge_read(kiban_gauge_t *o)
     ESP_RETURN_ON_ERROR(g16(0x30, &o->charge_voltage_mv), TAG, "chg v");
     ESP_RETURN_ON_ERROR(g16(0x32, &o->charge_current_ma), TAG, "chg i");
     ESP_RETURN_ON_ERROR(g16(0x0A, &o->battery_status), TAG, "status");
+    ESP_RETURN_ON_ERROR(g16(0x3A, &o->operation_status), TAG, "op status");
     return ESP_OK;
 }
 

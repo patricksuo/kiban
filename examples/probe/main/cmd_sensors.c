@@ -28,8 +28,8 @@ static int cmd_bat(int argc, char **argv)
            g.temp_c_x10 / 10, abs(g.temp_c_x10 % 10));
     printf("SOC %u %%  remaining %u / full %u / design %u mAh  cycles %u  SOH %u %%\n", g.soc_pct, g.remaining_mah,
            g.full_mah, g.design_mah, g.cycle_count, g.soh_pct);
-    printf("gauge config: ChargingVoltage %u mV, ChargingCurrent %u mA  BatteryStatus 0x%04x\n", g.charge_voltage_mv,
-           g.charge_current_ma, g.battery_status);
+    printf("gauge config: ChargingVoltage %u mV, ChargingCurrent %u mA  BatteryStatus 0x%04x  OperationStatus 0x%04x\n", g.charge_voltage_mv,
+           g.charge_current_ma, g.battery_status, g.operation_status);
     return 0;
 }
 

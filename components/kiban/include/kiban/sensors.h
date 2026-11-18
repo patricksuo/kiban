@@ -29,6 +29,7 @@ typedef struct {
     uint16_t charge_voltage_mv; // gauge's configured ChargingVoltage (NOT the charger's VREG)
     uint16_t charge_current_ma;
     uint16_t battery_status;
+    uint16_t operation_status;  // 0x3A: SEC[1:0] bits 2:1, CFGUPDATE bit 10
 } kiban_gauge_t;
 
 esp_err_t kiban_gauge_read(kiban_gauge_t *out);
