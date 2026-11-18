@@ -9,3 +9,4 @@ void probe_register_power_cmds(void);
 void probe_report_wake(void);
 void probe_register_wifi_cmds(void);
 void probe_register_ble_cmds(void);
+void probe_register_store_cmds(void);

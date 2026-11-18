@@ -1,7 +1,7 @@
 CONFIG_IDF_TARGET="esp32s3"
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
-CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_stock.csv"
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="../../partitions/kiban_16mb_v1.csv"
 # Console on the native USB-Serial/JTAG (the port esptool auto-resets through).
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 # Embedded 8 MB PSRAM; keep booting if the mode is wrong so the console survives.
