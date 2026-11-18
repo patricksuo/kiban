@@ -45,7 +45,7 @@ static esp_err_t play(int hz, int ms, int vol, int64_t *elapsed_ms, size_t *fram
 // ---- latency: play a short beep and find it in the module's input stream --------------------
 #define BIN_FRAMES 16                  // 1 ms at 16 kHz
 #define CAP_MS 1200
-#define CHUNK 160                      // 10 ms
+#define CHUNK 48                       // 3 ms
 typedef struct {
     uint32_t env[2][CAP_MS];           // per-ms peak |sample| >> 12, per slot
     int64_t t_end[CAP_MS];             // estimated capture time of the end of each bin (us)
@@ -127,7 +127,12 @@ static void latency_once(int run, int vol)
 static int cmd_audio(int argc, char **argv)
 {
     if (argc < 2) { printf("usage: audio open | at <CMD> | clk | tone [hz] [ms] [vol%%] | latency [n] [vol%%] | close\n"); return 1; }
-    if (!strcmp(argv[1], "open")) { s_open = false; return ensure_open(); }
+    if (!strcmp(argv[1], "open")) {
+        if (argc > 3) { kiban_audio_set_dma((uint32_t)atoi(argv[2]), (uint32_t)atoi(argv[3])); printf("dma %s x %s frames\n", argv[2], argv[3]); }
+        kiban_audio_close();
+        s_open = false;
+        return ensure_open();
+    }
     if (!strcmp(argv[1], "close")) { kiban_audio_close(); s_open = false; printf("closed, amp off\n"); return 0; }
     ensure_open();
     if (!strcmp(argv[1], "at") && argc > 2) {

@@ -27,6 +27,13 @@ static kiban_audio_line_cb_t s_cb;
 static void *s_ctx;
 static uint64_t s_frames;
 static int32_t *s_buf;
+static uint32_t s_dma_desc = 6, s_dma_frames = 240;   // IDF defaults
+
+void kiban_audio_set_dma(uint32_t desc_num, uint32_t frame_num)
+{
+    if (desc_num >= 2) s_dma_desc = desc_num;
+    if (frame_num >= 16) s_dma_frames = frame_num;
+}
 
 // Read UART for wait_ms, split into lines, report each; returns true if `want` was seen.
 static bool pump_lines(uint32_t wait_ms, const char *want)
@@ -95,6 +102,8 @@ esp_err_t kiban_audio_open(uint32_t wait_ms, kiban_audio_line_cb_t cb, void *ctx
     if (!s_tx) {
         i2s_chan_config_t chan = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_SLAVE);
         chan.auto_clear_after_cb = true;
+        chan.dma_desc_num = s_dma_desc;
+        chan.dma_frame_num = s_dma_frames;
         ESP_RETURN_ON_ERROR(i2s_new_channel(&chan, &s_tx, &s_rx), TAG, "i2s channel");   // duplex, as the vendor
         i2s_std_config_t std = {
             .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(KIBAN_AUDIO_RATE_HZ),

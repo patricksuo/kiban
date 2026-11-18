@@ -29,6 +29,9 @@ typedef void (*kiban_audio_line_cb_t)(const char *line, void *ctx);
 esp_err_t kiban_audio_open(uint32_t wait_ms, kiban_audio_line_cb_t cb, void *ctx);
 esp_err_t kiban_audio_close(void);     // amplifier off first, then I2S and UART released
 
+// DMA ring size for the next kiban_audio_open() (defaults 6 x 240 frames = 90 ms at 16 kHz).
+void kiban_audio_set_dma(uint32_t desc_num, uint32_t frame_num);
+
 // Send one AT command line ("\r\n" appended) and collect reply lines for wait_ms.
 esp_err_t kiban_audio_at(const char *cmd, uint32_t wait_ms);
 
