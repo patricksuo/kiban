@@ -167,3 +167,14 @@ All read-only except the accelerometer configuration (CTRL_REG1/4). USB plugged 
 | Cell voltage under charge | **4379 mV**, i.e. above 4.2 V. Safe only if the cell is a 4.35/4.4 V (LiHV) type. The cell rating is still unknown; the only public figure is "3.7 V nominal, 1000 mAh" `[community]`, which usually indicates a 4.2 V cell but is not authoritative |
 | PCF8563 | Reads 2265-11-07 09:37:08 with the VL flag set: time not valid (never set or lost power) |
 | SC7A20H | WHO_AM_I 0x11; lying flat: x ≈ −2..−15, y ≈ −17..−27, z ≈ −1000 mg (first sample −765 while settling) |
+
+### Charger VREG change (2026-11-18)
+
+- Goal: cap the charge termination voltage at 4200 mV until the cell rating is confirmed (user decision).
+- Plain writes to 0x04 alone were ignored (read-back unchanged, I2C ACKed); adding the vendor unlock (0x70 → 0x03)
+  did not help.
+- **Working sequence** `[measured]`: clear EN_CHG and WDT in 0x16 (`0xa0 → 0x80`), write 0x04 then 0x05 (both, vendor
+  order, even if 0x05 is unchanged), read back, then set EN_CHG again with HIZ clear (`0x16 = 0xa0`). After it:
+  VREG 4200 mV, CHRG_STAT "not charging / terminated" with the cell at 4371 mV, gauge current −45 mA.
+  Which of the two changes (charging disabled, or writing the high byte) is required was not isolated.
+- `kiban_board_init()` enforces this on every boot; the setter refuses values above 4200 mV.

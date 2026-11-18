@@ -133,32 +133,31 @@ esp_err_t kiban_charger_set_vreg_mv(uint32_t mv)
                         "VREG %lu mV outside %d..%d", (unsigned long)mv, KIBAN_CHARGER_VREG_MIN_MV,
                         KIBAN_CHARGER_VREG_CAP_MV);
     const uint32_t code = mv / 10;
-    uint8_t r4, r5;
+    uint8_t r4, r5, r16;
     ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, 0x04, &r4, 1), TAG, "read 0x04");
     ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, 0x05, &r5, 1), TAG, "read 0x05");
+    ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, 0x16, &r16, 1), TAG, "read 0x16");
     const uint8_t n4 = (uint8_t)((r4 & 0x07) | ((code & 0x1F) << 3));
     const uint8_t n5 = (uint8_t)((r5 & 0xF0) | ((code >> 5) & 0x0F));
-    // Plain writes to 0x04/0x05 are ignored on this device [measured]. Open the vendor's register
-    // unlock (0x70: 00 50 57 44, reads back 0x03; vendor cx25601n.cc:238-252), write, then lock again.
-    bool unlocked = false;
-    for (int i = 0; i < 5 && !unlocked; i++) {
-        static const uint8_t seq[] = {0x00, 0x50, 0x57, 0x44};
-        for (size_t k = 0; k < sizeof seq; k++) wr(KIBAN_CHARGER_ADDR, 0x70, seq[k]);
-        uint8_t st = 0;
-        unlocked = rd(KIBAN_CHARGER_ADDR, 0x70, &st, 1) == ESP_OK && st == 0x03;
-    }
-    if (!unlocked) ESP_LOGW(TAG, "charger unlock not confirmed; writing anyway");
-    esp_err_t werr = ESP_OK;
-    // Lower the high bits first when decreasing so no intermediate value exceeds the old one.
-    if (n5 != r5) werr = wr(KIBAN_CHARGER_ADDR, 0x05, n5);
-    if (werr == ESP_OK && n4 != r4) werr = wr(KIBAN_CHARGER_ADDR, 0x04, n4);
-    wr(KIBAN_CHARGER_ADDR, 0x70, 0x00);   // lock again
-    ESP_RETURN_ON_ERROR(werr, TAG, "write VREG");
+    if (n4 == r4 && n5 == r5) return ESP_OK;
+
+    // [measured] VREG writes are ignored while charging is enabled. Sequence after the crossmux SDK
+    // (0x1abin/freeink-sdk @e1008fc MetalioEink4Board.h:81-92): clear EN_CHG (0x16 bit5) and the
+    // watchdog bits (0x16[1:0]), write VREG, re-enable charging with HIZ (bit4) clear.
+    // If anything fails after charging is disabled, charging stays disabled (safe side).
+    ESP_RETURN_ON_ERROR(wr(KIBAN_CHARGER_ADDR, 0x16, (uint8_t)(r16 & ~0x23)), TAG, "disable charging");
+    // Vendor order: low part (0x04) then high part (0x05), both always written; a split field may
+    // latch on the high-byte write (vendor cx25601n.cc:106-108).
+    ESP_RETURN_ON_ERROR(wr(KIBAN_CHARGER_ADDR, 0x04, n4), TAG, "write 0x04 (charging left disabled)");
+    ESP_RETURN_ON_ERROR(wr(KIBAN_CHARGER_ADDR, 0x05, n5), TAG, "write 0x05 (charging left disabled)");
     uint8_t v4, v5;
-    ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, 0x04, &v4, 1), TAG, "verify 0x04");
-    ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, 0x05, &v5, 1), TAG, "verify 0x05");
+    ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, 0x04, &v4, 1), TAG, "verify 0x04 (charging left disabled)");
+    ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, 0x05, &v5, 1), TAG, "verify 0x05 (charging left disabled)");
     const uint32_t got = (uint32_t)(((v4 >> 3) & 0x1F) | ((v5 & 0x0F) << 5)) * 10;
-    ESP_RETURN_ON_FALSE(got == code * 10, ESP_ERR_INVALID_RESPONSE, TAG, "VREG read back %lu mV", (unsigned long)got);
-    ESP_LOGI(TAG, "charger VREG %lu mV (was 0x04=%02x 0x05=%02x)", (unsigned long)got, r4, r5);
+    ESP_RETURN_ON_FALSE(got == code * 10, ESP_ERR_INVALID_RESPONSE, TAG,
+                        "VREG read back %lu mV; charging left disabled", (unsigned long)got);
+    ESP_RETURN_ON_ERROR(wr(KIBAN_CHARGER_ADDR, 0x16, (uint8_t)((r16 & ~0x33) | 0x20)), TAG,
+                        "re-enable charging");
+    ESP_LOGI(TAG, "charger VREG %lu mV (was 0x04=%02x 0x05=%02x, 0x16=%02x)", (unsigned long)got, r4, r5, r16);
     return ESP_OK;
 }
