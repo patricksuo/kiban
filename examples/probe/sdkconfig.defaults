@@ -23,3 +23,5 @@ CONFIG_ESP_PHY_CALIBRATION_AND_DATA_STORAGE=n
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y
 CONFIG_BT_NIMBLE_NVS_PERSIST=n
+# HTTPS: verify chains whose top certificate is cross-signed by a root no longer in the bundle (open item W1).
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY=y

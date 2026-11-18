@@ -1,5 +1,6 @@
 // HTTP(S) GET into a callback or a file. TLS uses the ESP-IDF certificate bundle unless the caller supplies
-// a CA in PEM (needed for chains the bundle cannot verify, e.g. a cross-signed root: open item W1).
+// a CA in PEM. Products must set CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY=y, otherwise chains whose top
+// certificate is cross-signed by a root missing from the bundle fail (W1, e.g. Cloudflare's GTS Root R4 chain).
 // Blocking; call from a task with >= 16 KB of stack when TLS is used.
 #pragma once
 
