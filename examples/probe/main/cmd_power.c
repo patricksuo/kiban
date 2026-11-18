@@ -31,6 +31,7 @@ static RTC_DATA_ATTR uint32_t s_deep_asked_ms;
 typedef struct { uint32_t magic; int stage; } off_rec_t;
 static RTC_NOINIT_ATTR off_rec_t s_off;
 typedef struct { uint32_t magic; uint16_t out, cfg; } por_rec_t;
+#define POR_MAGIC 0x42315f31   // distinct from MAGIC so older RTC_NOINIT records cannot alias it
 static RTC_NOINIT_ATTR por_rec_t s_por;   // expander state seen at the last power-on boot (open item B1)
 
 // Full-screen markers drawn directly in the 800x480 frame (orientation irrelevant).
@@ -80,8 +81,8 @@ void probe_report_wake(void)
                (long long)s_deep.slept_ms, cause_name(s_deep.cause));
     const kiban_board_boot_info_t bi = kiban_board_boot_info();
     if (esp_reset_reason() == ESP_RST_POWERON && bi.ioexp_valid)
-        s_por = (por_rec_t){.magic = MAGIC, .out = bi.ioexp_output, .cfg = bi.ioexp_config};
-    if (s_por.magic == MAGIC)
+        s_por = (por_rec_t){.magic = POR_MAGIC, .out = bi.ioexp_output, .cfg = bi.ioexp_config};
+    if (s_por.magic == POR_MAGIC)
         printf("last power-on boot: expander output 0x%04x config 0x%04x (%s)\n", s_por.out, s_por.cfg,
                s_por.cfg == 0xffff ? "power-on default: the TCA9555 lost power" : "state kept across power-off");
     if (esp_reset_reason() == ESP_RST_POWERON) {
