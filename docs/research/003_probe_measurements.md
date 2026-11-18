@@ -353,3 +353,15 @@ Written: only `0x8000` (table, erase 0x8000–0x8FFF) and the probe at the new `
 | `assets` LittleFS @ `0xc40000` (3776K) | First mount: "corrupted dir pair" (old font data), formatted automatically; file append/read OK; 8 KB used |
 | `vendor_nvs` @ `0x9000` | Not byte-identical to the 2026-11-11 full backup. Entry-level diff (key names only): `reader/hs_days`, `reader/hs_sec` changed, `reader/rec1` added, `phy/cal_data` changed — all written by the stock firmware's reader and Wi-Fi while it was still in use after the backup `[inference]`; kiban never opens this partition. A private snapshot of the region was taken after the switch for future comparisons |
 | OTA | Running image copied to `ota_1` (1.56 MB), booted from `ota_1` @ `0x640000` (VALID), switched back to `ota_0` |
+
+## W1 · HTTPS with a cross-signed chain
+
+Cause: the ESP-IDF bundle contains GTS Root R4 (self-signed) but not GlobalSign Root CA; Cloudflare's chain ends with
+GTS Root R4 **cross-signed by** GlobalSign Root CA, and the default bundle verify callback only looks up the issuer of
+that top certificate `[source] esp_crt_bundle.c:315-363`. Fix: `CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_CROSS_SIGNED_VERIFY=y`
+(adds a CA callback, ~700 bytes of heap per the Kconfig help).
+
+| Item | Result |
+|---|---|
+| HTTPS GET 1 MB from the CDN node, with the option | 200, 1 000 000 bytes in 4.6 s (212 KB/s, includes the TLS handshake) |
+| Plain HTTP, same node, same session | 398 and 394 KB/s |
