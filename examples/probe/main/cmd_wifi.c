@@ -11,9 +11,27 @@
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
+#include "esp_http_client.h"
+#include "esp_crt_bundle.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
 #include "probe_cmds.h"
 
 static bool s_up;
+static EventGroupHandle_t s_ev;
+#define EV_GOT_IP BIT0
+#define EV_FAIL   BIT1
+
+static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
+{
+    (void)arg;
+    if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) xEventGroupSetBits(s_ev, EV_GOT_IP);
+    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+        const wifi_event_sta_disconnected_t *d = data;
+        printf("disconnected, reason %d\n", d->reason);
+        xEventGroupSetBits(s_ev, EV_FAIL);
+    }
+}
 
 static esp_err_t wifi_up(void)
 {
@@ -27,6 +45,11 @@ static esp_err_t wifi_up(void)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     cfg.nvs_enable = 0;
     if ((err = esp_wifi_init(&cfg)) != ESP_OK) return err;
+    if (!s_ev) {
+        s_ev = xEventGroupCreate();
+        esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, on_event, NULL);
+        esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_event, NULL);
+    }
     esp_wifi_set_storage(WIFI_STORAGE_RAM);
     if ((err = esp_wifi_set_mode(WIFI_MODE_STA)) != ESP_OK) return err;
     if ((err = esp_wifi_start()) != ESP_OK) return err;
@@ -56,9 +79,66 @@ static const char *auth_name(wifi_auth_mode_t a)
     }
 }
 
+// wifi join <ssid> <password>: credentials live in RAM only (WIFI_STORAGE_RAM, no NVS); never printed.
+static int wifi_join(const char *ssid, const char *pass)
+{
+    esp_err_t err = wifi_up();
+    if (err != ESP_OK) { printf("wifi init: %s\n", esp_err_to_name(err)); return 1; }
+    wifi_config_t wc = {0};
+    strlcpy((char *)wc.sta.ssid, ssid, sizeof wc.sta.ssid);
+    strlcpy((char *)wc.sta.password, pass, sizeof wc.sta.password);
+    wc.sta.threshold.authmode = WIFI_AUTH_OPEN;
+    esp_wifi_set_config(WIFI_IF_STA, &wc);
+    memset(&wc, 0, sizeof wc);
+    xEventGroupClearBits(s_ev, EV_GOT_IP | EV_FAIL);
+    const int64_t t0 = esp_timer_get_time();
+    esp_wifi_connect();
+    const EventBits_t b = xEventGroupWaitBits(s_ev, EV_GOT_IP | EV_FAIL, pdFALSE, pdFALSE, pdMS_TO_TICKS(20000));
+    const long long ms = (esp_timer_get_time() - t0) / 1000;
+    if (!(b & EV_GOT_IP)) { printf("join: failed after %lld ms\n", ms); return 1; }
+    wifi_ap_record_t ap;
+    esp_netif_ip_info_t ip;
+    esp_wifi_sta_get_ap_info(&ap);
+    esp_netif_get_ip_info(esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"), &ip);
+    printf("join: got IP in %lld ms; channel %u, RSSI %d dBm, phy %s%s%s\n", ms, ap.primary, ap.rssi,
+           ap.phy_11b ? "b" : "", ap.phy_11g ? "g" : "", ap.phy_11n ? "n" : "");
+    return 0;
+}
+
+// wifi get <url>: download and report throughput (body discarded).
+static int wifi_get(const char *url)
+{
+    esp_http_client_config_t cfg = {.url = url, .timeout_ms = 15000, .buffer_size = 4096,
+                                    .crt_bundle_attach = esp_crt_bundle_attach};
+    esp_http_client_handle_t c = esp_http_client_init(&cfg);
+    if (!c) return 1;
+    const int64_t t0 = esp_timer_get_time();
+    esp_err_t err = esp_http_client_open(c, 0);
+    long long total = 0;
+    if (err == ESP_OK) {
+        esp_http_client_fetch_headers(c);
+        static char buf[4096];
+        int n;
+        while ((n = esp_http_client_read(c, buf, sizeof buf)) > 0) total += n;
+    }
+    const double s = (double)(esp_timer_get_time() - t0) / 1e6;
+    printf("get: %s, status %d, %lld bytes in %.2f s = %.1f KB/s\n", esp_err_to_name(err),
+           esp_http_client_get_status_code(c), total, s, s > 0 ? (double)total / 1024.0 / s : 0.0);
+    esp_http_client_cleanup(c);
+    return err == ESP_OK ? 0 : 1;
+}
+
 static int cmd_wifi(int argc, char **argv)
 {
     if (argc > 1 && !strcmp(argv[1], "off")) { wifi_down(); printf("wifi off\n"); return 0; }
+    if (argc > 3 && !strcmp(argv[1], "join")) return wifi_join(argv[2], argv[3]);
+    if (argc > 2 && !strcmp(argv[1], "get")) return wifi_get(argv[2]);
+    if (argc > 1 && !strcmp(argv[1], "rssi")) {
+        wifi_ap_record_t ap;
+        if (esp_wifi_sta_get_ap_info(&ap) != ESP_OK) { printf("not connected\n"); return 1; }
+        printf("rssi %d dBm\n", ap.rssi);
+        return 0;
+    }
     const int64_t t0 = esp_timer_get_time();
     esp_err_t err = wifi_up();
     printf("wifi init: %s (%lld ms)  free internal heap %u\n", esp_err_to_name(err),
@@ -90,6 +170,6 @@ static int cmd_wifi(int argc, char **argv)
 
 void probe_register_wifi_cmds(void)
 {
-    const esp_console_cmd_t cmd = {.command = "wifi", .help = "wifi [off]: scan (counts / channel / RSSI only)", .func = cmd_wifi};
+    const esp_console_cmd_t cmd = {.command = "wifi", .help = "wifi [off | join <ssid> <pass> | get <url> | rssi]: scan (counts / RSSI only) or connection tests", .func = cmd_wifi};
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
 }
