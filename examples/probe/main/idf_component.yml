@@ -4,4 +4,6 @@ dependencies:
     path: ../../../components/kiban
   kiban_net:
     path: ../../../components/kiban_net
+  kiban_usb:
+    path: ../../../components/kiban_usb
   joltwallet/littlefs: "^1.14.0"

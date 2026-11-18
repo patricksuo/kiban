@@ -12,6 +12,7 @@
 #include "esp_psram.h"
 #include "esp_system.h"
 #include "kiban/board.h"
+#include "kiban_usb/usb_drive.h"
 #include "probe_cmds.h"
 
 static const char *TAG = "probe";
@@ -53,6 +54,8 @@ void app_main(void)
     // If the stock bootloader has rollback enabled and this image is pending, confirm it.
     esp_ota_mark_app_valid_cancel_rollback();
     probe_report_wake();
+    // Give the USB PHY to USB-Serial/JTAG in case a reset left it on OTG (USB drive mode).
+    kiban_usb_drive_stop();
 
     esp_console_repl_t *repl = NULL;
     esp_console_repl_config_t repl_cfg = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
@@ -76,6 +79,7 @@ void app_main(void)
     probe_register_wifi_cmds();
     probe_register_ble_cmds();
     probe_register_store_cmds();
+    probe_register_usb_cmds();
 
     ESP_ERROR_CHECK(esp_console_start_repl(repl));
 }

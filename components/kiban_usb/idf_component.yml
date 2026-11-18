@@ -1,0 +1,7 @@
+version: "0.2.0"
+description: Optional USB drive mode for kiban products (SD card exported as USB mass storage over TinyUSB). Pure C. Products must also depend on the kiban component at the same version.
+url: https://github.com/patricksuo/kiban
+license: MIT
+dependencies:
+  idf: ">=6.0"
+  espressif/esp_tinyusb: "~2.4.0"
