@@ -8,3 +8,4 @@ void probe_register_audio_cmds(void);
 void probe_register_power_cmds(void);
 void probe_report_wake(void);
 void probe_register_wifi_cmds(void);
+void probe_register_ble_cmds(void);

@@ -19,3 +19,7 @@ CONFIG_FATFS_CODEPAGE_932=y
 # Never touch the stock NVS partition (it holds the vendor's Wi-Fi credentials and device identity).
 CONFIG_ESP_WIFI_NVS_ENABLED=n
 CONFIG_ESP_PHY_CALIBRATION_AND_DATA_STORAGE=n
+# BLE (NimBLE) for RF checks; no bonding persistence (stays out of the stock NVS).
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_NVS_PERSIST=n
