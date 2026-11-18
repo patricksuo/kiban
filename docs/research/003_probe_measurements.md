@@ -48,8 +48,10 @@ label is not yet checked). Each entry is `[measured]` unless tagged otherwise. D
 - After that, every chip reset issued by esptool (`--after hard-reset`, reset reason `USB_UART_CHIP_RESET`)
   re-entered download mode (`boot:0x3`) with the key released. A long-press power-off followed by a long-press
   power-on booted the app normally. Cause not yet known `[to-verify]`.
-- Opening the USB-Serial/JTAG port with DTR/RTS asserted can reset the chip into download mode; consoles must set
-  DTR/RTS low before opening the port.
+- Flashing with `esptool --after watchdog-reset` booted the new app directly (`boot:0x2b SPI_FAST_FLASH_BOOT`);
+  this is the working flash workflow.
+- Opening the USB-Serial/JTAG port on macOS resets the chip into the app (a fresh boot log appears) even with
+  DTR/RTS set low before `open()`; probe sessions therefore start from a fresh boot.
 
 ## USB enumeration
 
@@ -57,10 +59,26 @@ label is not yet checked). Each entry is `[measured]` unless tagged otherwise. D
   device, then present again after a power cycle). Cable orientation was suspected earlier but not confirmed
   `[to-verify]`.
 
-## P2 implementation notes (not yet run on the device)
+## P2 · E-paper panel
 
-Nothing in this section is measured. It records what `components/kiban/src/epd.c` and the `epd` probe command
-were built from, and what the first device run has to answer.
+Run with `epd` probe commands; visual results reported by the user looking at the panel.
+
+| Item | Result |
+|---|---|
+| Init (DC13/RST18, BUSY active high) | Works; panel responds and refreshes |
+| Orientation | Frame (800×480, row 0 at gate 479) top-left appears at the **top-right** of the device held portrait with the cover keys at the bottom; frame +x points **down**. Portrait UI must rotate: portrait `(px, py)` = `(479 − y, x)` of the frame |
+| `FULL` (vendor MCU waveform, `0xC7`) | transfer 81 ms, BUSY ~1017–1026 ms; clean |
+| `FAST` (OTP, forced temperature, `0xD7`) | transfer 80 ms, BUSY 1019 ms — **not faster than FULL** |
+| `FULL_OTP` (`0xF7`) | transfer 80 ms, BUSY 1022 ms; clean white afterwards, no ghost of the previous stripes |
+| `PARTIAL` (vendor partial waveform, `0xCF`) | transfer 40 ms (+40 ms 0x26 resync), BUSY 564 ms; marker → checker left **no visible ghosting** |
+| Gray overlay | base full refresh BUSY 1018 ms + gray pass BUSY 151 ms (transfers 252 + 264 ms); four bands black / dark / light / white in the expected order, boundaries clear, bands uniform |
+| Sleep (`0x10=0x01`) | returns OK |
+
+Timing resolution is one RTOS tick (10 ms). `init` itself shows BUSY 0 ms because no refresh runs during init.
+
+## P2 implementation notes
+
+What `components/kiban/src/epd.c` and the `epd` probe command were built from.
 
 ### Sources used
 
@@ -93,7 +111,10 @@ before partials and never restores `0x01` `[source] esp_lcd_panel_ssd1677.c:565-
 BUSY timing resolution is one RTOS tick (10 ms at `CONFIG_FREERTOS_HZ=100`). The probe logs `transfer` (SPI) and
 `BUSY` ms per refresh and warns when BUSY was never seen high, since a near-zero BUSY time can mean nothing was driven.
 
-### Open questions for the first device run
+### Questions for the first device run
+
+Answered by the P2 table above: 1 (orientation), 2 and 3 (BUSY polarity, DC/RST), 6 (gray band order).
+Still open: 4 (which partial LUT ghosts least over many pages), 5 (whether the 0x26 resync is needed), 7 (sleep RAM retention).
 
 1. **Orientation** `[inference]`. Frame row 0 is written to gate address 479 (data entry `0x11=0x01`, Y counter
    starting at 479), exactly as the vendor does. The vendor's portrait UI maps logical `(lx, ly)` to panel
