@@ -68,6 +68,7 @@ void app_main(void)
     probe_register_epd_cmds();
     probe_register_touch_cmds();
     probe_register_sensor_cmds();
+    probe_register_storage_cmds();
 
     ESP_ERROR_CHECK(esp_console_start_repl(repl));
 }
