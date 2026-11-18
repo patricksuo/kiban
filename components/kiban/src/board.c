@@ -82,8 +82,12 @@ esp_err_t kiban_board_init(const kiban_board_cfg_t *cfg)
 
     // Charging safety: enforce the termination voltage on every boot (another firmware or a charger
     // reset may have left a higher value).
+    // Not fatal: the rest of the board is usable, but say so loudly. [measured] 2026-11-18: writes to
+    // 0x04/0x05 are ignored on this device, even after the vendor unlock; VREG stays 4400 mV.
     if (cfg->charge_vreg_mv) {
-        ESP_RETURN_ON_ERROR(kiban_charger_set_vreg_mv(cfg->charge_vreg_mv), TAG, "charger VREG");
+        esp_err_t verr = kiban_charger_set_vreg_mv(cfg->charge_vreg_mv);
+        if (verr != ESP_OK) ESP_LOGE(TAG, "charger VREG NOT enforced (%s); charging still uses the previous VREG",
+                                     esp_err_to_name(verr));
     }
 
     ESP_LOGI(TAG, "board up");

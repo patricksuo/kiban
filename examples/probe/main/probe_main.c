@@ -45,7 +45,8 @@ static int cmd_reboot(int argc, char **argv)
 void app_main(void)
 {
     // Board bring-up drives the USB mux to the ESP side first thing it can.
-    esp_err_t err = kiban_board_init(NULL);
+    kiban_board_cfg_t bcfg = KIBAN_BOARD_CFG_DEFAULT();
+    esp_err_t err = kiban_board_init(&bcfg);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "board init failed: %s (console still starts)", esp_err_to_name(err));
     }

@@ -1,6 +1,7 @@
 // P4 commands: bat, chg, rtc, imu.
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "esp_console.h"
 #include "freertos/FreeRTOS.h"
@@ -28,8 +29,14 @@ static const char *CHRG[] = {"not charging / terminated", "pre-charge / CC", "CV
 
 static int cmd_chg(int argc, char **argv)
 {
-    (void)argc; (void)argv;
     kiban_charger_t c;
+    if (argc == 3 && !strcmp(argv[1], "vreg")) {
+        if (kiban_charger_read(&c) == ESP_OK) printf("before: 0x04=%02x 0x05=%02x (%lu mV)\n", c.regs[4], c.regs[5], (unsigned long)c.vreg_mv);
+        esp_err_t e = kiban_charger_set_vreg_mv((uint32_t)atoi(argv[2]));
+        printf("set_vreg: %s\n", esp_err_to_name(e));
+        if (kiban_charger_read(&c) == ESP_OK) printf("after:  0x04=%02x 0x05=%02x (%lu mV)\n", c.regs[4], c.regs[5], (unsigned long)c.vreg_mv);
+        return 0;
+    }
     esp_err_t err = kiban_charger_read(&c);
     if (err != ESP_OK) { printf("charger: %s\n", esp_err_to_name(err)); return 1; }
     for (int r = 0; r < 0x40; r += 16) {
@@ -74,7 +81,7 @@ void probe_register_sensor_cmds(void)
 {
     const esp_console_cmd_t cmds[] = {
         {.command = "bat", .help = "fuel gauge readings", .func = cmd_bat},
-        {.command = "chg", .help = "charger register dump (read-only) and decode", .func = cmd_chg},
+        {.command = "chg", .help = "chg [vreg <mv>]: charger register dump and decode; vreg sets the termination voltage (capped at 4200)", .func = cmd_chg},
         {.command = "rtc", .help = "read the RTC", .func = cmd_rtc},
         {.command = "imu", .help = "imu [seconds]: accelerometer samples at 4 Hz", .func = cmd_imu},
     };
