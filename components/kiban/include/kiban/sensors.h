@@ -61,6 +61,9 @@ typedef struct {
 } kiban_rtc_time_t;
 
 esp_err_t kiban_rtc_get(kiban_rtc_time_t *out);
+// Countdown timer interrupt after `seconds` (1 Hz source); used to find where the RTC INT line goes.
+esp_err_t kiban_rtc_timer_irq(uint8_t seconds);
+esp_err_t kiban_rtc_timer_off(void);
 
 typedef struct { int16_t x_mg, y_mg, z_mg; } kiban_imu_sample_t;
 

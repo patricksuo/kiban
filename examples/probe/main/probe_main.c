@@ -52,6 +52,7 @@ void app_main(void)
     }
     // If the stock bootloader has rollback enabled and this image is pending, confirm it.
     esp_ota_mark_app_valid_cancel_rollback();
+    probe_report_wake();
 
     esp_console_repl_t *repl = NULL;
     esp_console_repl_config_t repl_cfg = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
@@ -70,6 +71,7 @@ void app_main(void)
     probe_register_sensor_cmds();
     probe_register_storage_cmds();
     probe_register_audio_cmds();
+    probe_register_power_cmds();
 
     ESP_ERROR_CHECK(esp_console_start_repl(repl));
 }

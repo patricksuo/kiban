@@ -5,3 +5,5 @@ void probe_register_touch_cmds(void);
 void probe_register_sensor_cmds(void);
 void probe_register_storage_cmds(void);
 void probe_register_audio_cmds(void);
+void probe_register_power_cmds(void);
+void probe_report_wake(void);

@@ -161,3 +161,23 @@ esp_err_t kiban_charger_set_vreg_mv(uint32_t mv)
     ESP_LOGI(TAG, "charger VREG %lu mV (was 0x04=%02x 0x05=%02x, 0x16=%02x)", (unsigned long)got, r4, r5, r16);
     return ESP_OK;
 }
+
+// PCF8563 countdown timer interrupt (datasheet: 0x01 Control_status_2 TIE=bit0 TF=bit2,
+// 0x0E Timer_control TE=bit7 TD[1:0]=10 for 1 Hz, 0x0F Timer value). INT is open-drain, active low.
+esp_err_t kiban_rtc_timer_irq(uint8_t seconds)
+{
+    uint8_t c2;
+    ESP_RETURN_ON_ERROR(wr(KIBAN_RTC_ADDR, 0x0E, 0x00), TAG, "timer off");
+    ESP_RETURN_ON_ERROR(rd(KIBAN_RTC_ADDR, 0x01, &c2, 1), TAG, "ctrl2");
+    ESP_RETURN_ON_ERROR(wr(KIBAN_RTC_ADDR, 0x01, (uint8_t)((c2 & ~0x1C) | 0x01)), TAG, "TIE");   // clear AF/TF/TI_TP
+    ESP_RETURN_ON_ERROR(wr(KIBAN_RTC_ADDR, 0x0F, seconds), TAG, "timer value");
+    return wr(KIBAN_RTC_ADDR, 0x0E, 0x82);
+}
+
+esp_err_t kiban_rtc_timer_off(void)
+{
+    uint8_t c2;
+    ESP_RETURN_ON_ERROR(wr(KIBAN_RTC_ADDR, 0x0E, 0x00), TAG, "timer off");
+    ESP_RETURN_ON_ERROR(rd(KIBAN_RTC_ADDR, 0x01, &c2, 1), TAG, "ctrl2");
+    return wr(KIBAN_RTC_ADDR, 0x01, (uint8_t)(c2 & ~0x1D));
+}
