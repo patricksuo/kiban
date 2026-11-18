@@ -1,0 +1,9 @@
+# Third-party reference sources, flash dumps (contain device identity / Wi-Fi credentials), build output
+vendor/
+build/
+managed_components/
+dependencies.lock
+sdkconfig
+sdkconfig.old
+*.bin
+.DS_Store
