@@ -16,7 +16,7 @@ extern "C" {
 
 typedef enum {
     KIBAN_BAT_DISCHARGING = 0,   // on battery, or external power with charging stopped
-    KIBAN_BAT_CHARGING,          // pre-charge / CC / CV / top-off
+    KIBAN_BAT_CHARGING,          // charger active (pre-charge / CC / CV / top-off) and current flowing in
     KIBAN_BAT_FULL,              // charge terminated, external power present
 } kiban_bat_state_t;
 

@@ -32,7 +32,9 @@ esp_err_t kiban_battery_poll(kiban_soc_t *soc, int64_t now_us, kiban_battery_t *
     o->charger_ok = kiban_charger_policy_ok();
     temperature_gate(o->gauge.temp_c_x10, &o->temp_blocked);
 
-    const bool charging = o->charger.chrg_stat >= 1;
+    // The charger can report pre-charge/CC while the cell is actually discharging, e.g. when the cell is
+    // above VREG (measured: CHRG_STAT 1 at 4300 mV with VREG 4200, gauge -45 mA). Require current in.
+    const bool charging = o->charger.chrg_stat >= 1 && o->gauge.avg_current_ma > 5;
     const bool full = !charging && o->charger.en_chg && o->gauge.avg_current_ma >= -5 &&
                       o->gauge.voltage_mv + 80 >= o->charger.vreg_mv;
     o->state = charging ? KIBAN_BAT_CHARGING : full ? KIBAN_BAT_FULL : KIBAN_BAT_DISCHARGING;
