@@ -102,9 +102,9 @@ static const step_t STEPS[] = {
     {STEP_TAP, 430, 750, "tap the bottom-right target"},
     {STEP_TAP, 240, 400, "tap the centre target"},
     {STEP_SWIPE_DOWN, 240, 0, "swipe down along the arrow"},
-    {STEP_COVER, 80, 0, "press the cover key under the arrow (left)"},
-    {STEP_COVER, 240, 0, "press the cover key under the arrow (middle)"},
-    {STEP_COVER, 400, 0, "press the cover key under the arrow (right)"},
+    {STEP_COVER, 80, 0, "press the cover key below the triangle (left)"},
+    {STEP_COVER, 240, 0, "press the cover key below the triangle (middle)"},
+    {STEP_COVER, 400, 0, "press the cover key below the triangle (right)"},
 };
 
 static void draw_step(const step_t *s)
@@ -112,7 +112,7 @@ static void draw_step(const step_t *s)
     switch (s->kind) {
     case STEP_TAP: target(s->x, s->y); break;
     case STEP_SWIPE_DOWN: arrow_down(s->x, 150, 650); break;
-    case STEP_COVER: arrow_down(s->x, 560, 795); break;
+    case STEP_COVER: for (int i = 0; i < 36; i++) rect(s->x - 36 + i, 760 + i, s->x + 36 - i, 760 + i); break;
     }
 }
 
@@ -141,7 +141,8 @@ static bool wait_gesture(int timeout_s, kiban_touch_point_t *first, kiban_touch_
 
 static int cmd_touch_test(int argc, char **argv)
 {
-    (void)argc; (void)argv;
+    // "touch_test keys" runs only the cover-key steps.
+    const int first_step = (argc > 1 && !strcmp(argv[1], "keys")) ? 4 : 0;
     esp_err_t err = kiban_touch_init();
     if (err != ESP_OK) { printf("touch init: %s\n", esp_err_to_name(err)); return 1; }
     if (!s_fb) s_fb = heap_caps_malloc(KIBAN_EPD_FB_BYTES, MALLOC_CAP_SPIRAM);
@@ -151,11 +152,11 @@ static int cmd_touch_test(int argc, char **argv)
 
     const int n = sizeof STEPS / sizeof STEPS[0];
     memset(s_fb, 0xFF, KIBAN_EPD_FB_BYTES);
-    draw_step(&STEPS[0]);
+    draw_step(&STEPS[first_step]);
     err = kiban_epd_show(s_fb, KIBAN_EPD_MODE_FULL, 0);
     if (err != ESP_OK) { printf("epd: %s\n", esp_err_to_name(err)); return 1; }
 
-    for (int i = 0; i < n; i++) {
+    for (int i = first_step; i < n; i++) {
         const step_t *s = &STEPS[i];
         printf("step %d/%d: %s (15 s)\n", i + 1, n, s->name);
         kiban_touch_point_t a = {0}, b = {0};
@@ -185,7 +186,7 @@ void probe_register_touch_cmds(void)
 {
     const esp_console_cmd_t cmds[] = {
         {.command = "touch", .help = "touch [seconds]: print raw touch reports", .func = cmd_touch},
-        {.command = "touch_test", .help = "guided touch test with on-screen targets", .func = cmd_touch_test},
+        {.command = "touch_test", .help = "touch_test [keys]: guided touch test with on-screen targets", .func = cmd_touch_test},
     };
     for (size_t i = 0; i < sizeof cmds / sizeof cmds[0]; i++) ESP_ERROR_CHECK(esp_console_cmd_register(&cmds[i]));
 }
