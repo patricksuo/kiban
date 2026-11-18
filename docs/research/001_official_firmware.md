@@ -357,6 +357,25 @@ Charging strategy in the docs: `docs/battery-soc-and-charge.md` §4 [community].
 
 Recovery: not officially documented. Going by the code, "unplug USB → wait for the power IC to discharge → long-press POWER" works.
 
+**Evidence from the device's own log** `[measured]` (2026-11-18, `metalio/e-ink/logs/metalio_logs.txt` read off the SD card;
+the RTC was never set, so dates are wrong but the order is reliable). The last events written before the log wraps:
+
+```
+PowerPolicy: standby LP idle elapsed=1800 s (limit 1800 s) -> power off
+PowerHw: begin power off (UI + pulse)
+PowerHw: PWR_KEY_PULSE
+HeapCheck: OK: internal RAM + PSRAM integrity        <- ~2 s later, the ESP32 is still running
+```
+
+This matches scenario A: the 30-minute standby auto power-off fired with USB attached, the power-off pulses did not cut
+power, and the firmware stayed in `PwrOffTask`. The same log shows the charger "recharge kick" running every ~2.7 s
+(`vbat=4278mV < VREG=4400mV`, status "not charging / full" each time) while the UI showed 95 %.
+
+A separate core dump on the card (`metalio_coredump.elf`, ESP-IDF core dump with a 24-byte header) records a crash with
+EXCCAUSE 20 (InstFetchProhibited), EXCVADDR `0xad567820` (garbage), EPC1 `0x4037bc23`; the only task name present is
+`uart_rx_task` (the BT audio module's UART receiver). Its time is unknown, and without the v2.0.65 ELF the stack cannot be
+symbolised.
+
 ---
 
 ## 5. Storage

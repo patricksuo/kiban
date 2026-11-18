@@ -178,3 +178,13 @@ All read-only except the accelerometer configuration (CTRL_REG1/4). USB plugged 
   VREG 4200 mV, CHRG_STAT "not charging / terminated" with the cell at 4371 mV, gauge current −45 mA.
   Which of the two changes (charging disabled, or writing the high byte) is required was not isolated.
 - `kiban_board_init()` enforces this on every boot; the setter refuses values above 4200 mV.
+
+## P5 · SD card and motor
+
+| Item | Result |
+|---|---|
+| SD mount | SDMMC 1-bit, DAT3 (GPIO46) pulled up; 15.2 GB SDHC card, FAT; mount ~35–40 ms; never formatted |
+| Clock | 20 MHz and 40 MHz both mount |
+| Read speed | 2.35 MB/s at 20 MHz, 4.51 MB/s at 40 MHz (only a 66 KB file was available; rough figures) |
+| Card contents | `metalio/e-ink/logs/` holds the vendor firmware's ring log and a moved core dump (see research/001 §4.8) |
+| Motor | GPIO44 on/off. A 200 ms pulse is clearly felt; the vendor's 35 ms pulse was barely noticeable to the user |

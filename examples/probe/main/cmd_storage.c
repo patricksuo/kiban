@@ -71,6 +71,24 @@ static int cmd_sd(int argc, char **argv)
                us ? (double)total / (double)us : 0.0);
         return 0;
     }
+    if (!strcmp(argv[1], "hex") && argc > 2) {
+        // Read-only dump for copying a file off the card: one line per 64 bytes, "HEX <offset> <hex>".
+        char path[200];
+        snprintf(path, sizeof path, MNT "%s%s", argv[2][0] != '/' ? "/" : "", argv[2]);
+        FILE *f = fopen(path, "rb");
+        if (!f) { printf("cannot open %s\n", path); return 1; }
+        uint8_t b[64];
+        size_t r, off = 0;
+        while ((r = fread(b, 1, sizeof b, f)) > 0) {
+            printf("HEX %08x ", (unsigned)off);
+            for (size_t i = 0; i < r; i++) printf("%02x", b[i]);
+            printf("\n");
+            off += r;
+        }
+        fclose(f);
+        printf("HEXEND %u\n", (unsigned)off);
+        return 0;
+    }
     if (!strcmp(argv[1], "umount")) { printf("umount: %s\n", esp_err_to_name(kiban_sd_unmount())); return 0; }
     printf("unknown subcommand\n");
     return 1;
@@ -87,7 +105,7 @@ static int cmd_motor(int argc, char **argv)
 void probe_register_storage_cmds(void)
 {
     const esp_console_cmd_t cmds[] = {
-        {.command = "sd", .help = "sd mount [khz] | info | ls [path] [depth] | bench <path> | umount (read-only)", .func = cmd_sd},
+        {.command = "sd", .help = "sd mount [khz] | info | ls [path] [depth] | bench <path> | hex <path> | umount (read-only)", .func = cmd_sd},
         {.command = "motor", .help = "motor [ms]: vibration pulse (default 35 ms, max 1000)", .func = cmd_motor},
     };
     for (size_t i = 0; i < sizeof cmds / sizeof cmds[0]; i++) ESP_ERROR_CHECK(esp_console_cmd_register(&cmds[i]));
