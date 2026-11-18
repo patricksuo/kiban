@@ -9,6 +9,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "kiban/ioexp.h"
+#include "kiban/sensors.h"
 
 static const char *TAG = "kiban.board";
 static i2c_master_bus_handle_t s_bus;
@@ -78,6 +79,12 @@ esp_err_t kiban_board_init(const kiban_board_cfg_t *cfg)
     const gpio_config_t intr = {.pin_bit_mask = 1ULL << KIBAN_PIN_IOEXP_INT, .mode = GPIO_MODE_INPUT,
                                 .pull_up_en = GPIO_PULLUP_ENABLE};
     ESP_RETURN_ON_ERROR(gpio_config(&intr), TAG, "ioexp int");
+
+    // Charging safety: enforce the termination voltage on every boot (another firmware or a charger
+    // reset may have left a higher value).
+    if (cfg->charge_vreg_mv) {
+        ESP_RETURN_ON_ERROR(kiban_charger_set_vreg_mv(cfg->charge_vreg_mv), TAG, "charger VREG");
+    }
 
     ESP_LOGI(TAG, "board up");
     return ESP_OK;

@@ -28,9 +28,11 @@ typedef enum {
 typedef struct {
     uint32_t i2c_hz;           // default 400 kHz
     uint32_t expander_wait_ms; // how long to retry the expander at boot; default 3000
+    uint32_t charge_vreg_mv;   // charger termination voltage enforced at init; capped at
+                               // KIBAN_CHARGER_VREG_CAP_MV (4200). 0 = leave the charger untouched
 } kiban_board_cfg_t;
 
-#define KIBAN_BOARD_CFG_DEFAULT() { .i2c_hz = 400000, .expander_wait_ms = 3000 }
+#define KIBAN_BOARD_CFG_DEFAULT() { .i2c_hz = 400000, .expander_wait_ms = 3000, .charge_vreg_mv = 4200 }
 
 // Bring-up, in this order:
 //  1. I2C master bus on SDA41/SCL42.
@@ -39,7 +41,8 @@ typedef struct {
 //     touch held in reset.
 //  3. Panel/SD rail ON, 10 ms, release touch reset, 120 ms settle.
 //  4. Motor GPIO low.
-// Mirrors the vendor boot levels; no charger access, no power-off pulses.
+//  5. Charger VREG set to cfg->charge_vreg_mv (default 4200 mV) and verified.
+// Mirrors the vendor boot levels; no power-off pulses.
 esp_err_t kiban_board_init(const kiban_board_cfg_t *cfg);
 
 i2c_master_bus_handle_t kiban_board_i2c(void);

@@ -7,6 +7,7 @@
 
 #include "driver/i2c_master.h"
 #include "esp_check.h"
+#include "esp_log.h"
 #include "kiban/board.h"
 
 static const char *TAG = "kiban.sensors";
@@ -123,5 +124,28 @@ esp_err_t kiban_imu_read(kiban_imu_sample_t *o)
     o->x_mg = (int16_t)(b[0] | (b[1] << 8)) >> 4;
     o->y_mg = (int16_t)(b[2] | (b[3] << 8)) >> 4;
     o->z_mg = (int16_t)(b[4] | (b[5] << 8)) >> 4;
+    return ESP_OK;
+}
+
+esp_err_t kiban_charger_set_vreg_mv(uint32_t mv)
+{
+    ESP_RETURN_ON_FALSE(mv >= KIBAN_CHARGER_VREG_MIN_MV && mv <= KIBAN_CHARGER_VREG_CAP_MV, ESP_ERR_INVALID_ARG, TAG,
+                        "VREG %lu mV outside %d..%d", (unsigned long)mv, KIBAN_CHARGER_VREG_MIN_MV,
+                        KIBAN_CHARGER_VREG_CAP_MV);
+    const uint32_t code = mv / 10;
+    uint8_t r4, r5;
+    ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, 0x04, &r4, 1), TAG, "read 0x04");
+    ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, 0x05, &r5, 1), TAG, "read 0x05");
+    const uint8_t n4 = (uint8_t)((r4 & 0x07) | ((code & 0x1F) << 3));
+    const uint8_t n5 = (uint8_t)((r5 & 0xF0) | ((code >> 5) & 0x0F));
+    // Lower the high bits first when decreasing so no intermediate value exceeds the old one.
+    if (n5 != r5) ESP_RETURN_ON_ERROR(wr(KIBAN_CHARGER_ADDR, 0x05, n5), TAG, "write 0x05");
+    if (n4 != r4) ESP_RETURN_ON_ERROR(wr(KIBAN_CHARGER_ADDR, 0x04, n4), TAG, "write 0x04");
+    uint8_t v4, v5;
+    ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, 0x04, &v4, 1), TAG, "verify 0x04");
+    ESP_RETURN_ON_ERROR(rd(KIBAN_CHARGER_ADDR, 0x05, &v5, 1), TAG, "verify 0x05");
+    const uint32_t got = (uint32_t)(((v4 >> 3) & 0x1F) | ((v5 & 0x0F) << 5)) * 10;
+    ESP_RETURN_ON_FALSE(got == code * 10, ESP_ERR_INVALID_RESPONSE, TAG, "VREG read back %lu mV", (unsigned long)got);
+    ESP_LOGI(TAG, "charger VREG %lu mV (was 0x04=%02x 0x05=%02x)", (unsigned long)got, r4, r5);
     return ESP_OK;
 }

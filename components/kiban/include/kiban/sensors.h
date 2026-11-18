@@ -42,8 +42,18 @@ typedef struct {
     uint8_t chrg_stat;          // 0 not charging/terminated, 1 pre/CC, 2 CV, 3 top-off
 } kiban_charger_t;
 
-// READ-ONLY. Never writes the charger (no unlock sequence, no register writes).
+// Reads registers only.
 esp_err_t kiban_charger_read(kiban_charger_t *out);
+
+// Charge termination voltage cap. The cell rating is unconfirmed, so kiban refuses anything above
+// 4200 mV (safe for both 4.2 V and 4.35/4.4 V cells). Decision of 2026-11-18.
+#define KIBAN_CHARGER_VREG_CAP_MV 4200
+#define KIBAN_CHARGER_VREG_MIN_MV 3840
+
+// The only charger write in kiban: program VREG (registers 0x04[7:3] and 0x05[3:0], 10 mV steps,
+// layout from the vendor cx25601n.cc:96-115), then read back and verify. No unlock sequence.
+// Returns ESP_ERR_INVALID_ARG above the cap.
+esp_err_t kiban_charger_set_vreg_mv(uint32_t mv);
 
 typedef struct {
     int year, month, day, weekday, hour, minute, second;
