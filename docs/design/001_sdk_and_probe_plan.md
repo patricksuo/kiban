@@ -90,9 +90,8 @@ The final headers are written in stage order (§6) and reviewed per stage, not a
 
 ### 4.1 The one real bricking risk: USB routing
 
-Status: the probe now boots and drives P0.0 high itself (see research/003). The expander keeps its state across a
-power-key power-off, so the unconfigured default only matters after the battery is removed or fully drained; it is
-still unknown.
+Status: **resolved.** With the expander unconfigured (after a real power-off) the mux routes USB to the ESP32-S3, and ROM
+download mode (hold AI, long-press POWER) is reachable over USB (research/003 B1).
 
 USB to the ESP32-S3 goes through a mux (FSUSB42) selected by TCA9555 P0.0 (high = ESP debug/flash path).
 The stock firmware drives it high at boot. **Which way the mux defaults while the expander is still an input
@@ -153,7 +152,7 @@ Items that are known but not yet settled. Each has a trigger: the point at which
 | E1 | Which partial-refresh waveform ghosts least over many page turns (vendor partial LUT vs FreeInk `lut_fast_metalio`), and how many partials before a forced full refresh | Page-turn quality and speed in the reader | Probe command that turns N pages of real text with each LUT and a configurable full-refresh interval; user judges ghosting after 10/20/50 turns; record BUSY times | bunko's page-turn implementation |
 | E2 | Whether rewriting the old-frame plane (0x26) after each partial is needed | Costs ~40 ms per page turn | Run the E1 sequence with and without the resync; compare ghosting and correctness | bunko's page-turn implementation (decide together with E1) |
 | E3 | Whether panel deep sleep (`0x10=0x01`) keeps controller RAM, so a partial refresh is valid after wake | Decides whether wake-from-sleep needs a ~1 s full refresh before the first page turn | Sleep the panel, wake/re-init without a full refresh, partial-refresh a known frame, check for garbage | Power policy (stage P7) |
-| B1 | Default of the USB mux (P0.0) with an unconfigured TCA9555 | Recovery path if a broken firmware is installed and the board was really powered off | A real `kiban_power_off` resets the expander (research/003, 0.2.0 checks): power off, then hold AI and long-press POWER, check USB enumeration (user's hands) | Shipping any firmware that others may install |
+| B1 | ~~Default of the USB mux (P0.0) with an unconfigured TCA9555~~ **Closed:** routes USB to the ESP32-S3; ROM download mode is reachable after a real power-off (research/003 B1) | — | — | — |
 | W1 | HTTPS to a CDN using a cross-signed GTS Root R4 chain fails certificate verification with the IDF bundle | Products fetching content over HTTPS | Test the products' real endpoints; if needed, attach a specific root/intermediate instead of the bundle, or check IDF's cross-signed handling | First product feature that downloads over HTTPS |
 | W2 | lwIP TCP receive window (~5.7 KB default) limits throughput on long-RTT paths | Download speed from distant servers | Raise `CONFIG_LWIP_TCP_WND_DEFAULT` / receive mailbox (PSRAM is available) and measure | Product download implementation |
 | B2 | Intermittent USB enumeration on the Mac (cable orientation suspected) | Development friction only | Note conditions each time it happens | — |

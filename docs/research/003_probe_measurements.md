@@ -331,3 +331,12 @@ output); the probe keeps them in RAM only (`WIFI_STORAGE_RAM`, no NVS). Network 
 
 Consequence for B1: the USB mux default can now be tested without removing the battery: `kiban_power_off`, then hold
 AI and long-press POWER (ROM download mode, expander unconfigured) and check USB enumeration (needs the user's hands).
+
+## B1 · USB with an unconfigured expander (recovery path)
+
+After a real `kiban_power_off` (the TCA9555 loses power, see 0.2.0 checks), the user held AI (GPIO0) and long-pressed
+POWER: the Mac enumerated the USB-Serial/JTAG 11 s after the power-off, and esptool connected **without resetting the
+chip** (ROM download mode, "Staying in bootloader"). With the expander unconfigured, the USB mux routes USB to the
+ESP32-S3 `[measured]`. Recovery is therefore always possible, even with a broken firmware that never drives P0.0:
+power off (or let it power off), hold AI, long-press POWER, flash over USB. Leaving download mode:
+`esptool --before no-reset --after watchdog-reset ...`.
