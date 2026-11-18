@@ -198,3 +198,20 @@ All read-only except the accelerometer configuration (CTRL_REG1/4). USB plugged 
 | Open sequence | ~2.7 s including the vendor's 700 ms gap and a 2 s confirmation window |
 | Tone 440 Hz, 1 s, amplifier P0.1=0 / P0.4=1 | Audible at 5 %, 15 %, 30 % (linear sample scale). 30 % is already loud; the user heard slight distortion at 30 %, none at 5 % and 15 % |
 | Not yet measured | Start latency (write → sound), module model / AT command set, microphone path, behaviour after main-rail power cycles, current draw |
+
+### P6 · Start latency (microphone loopback)
+
+Method: the module's input stream (I2S0 RX, DIN17, same slave clock) records while an 80 ms 1 kHz beep is written at
+5 % volume, amplifier already on and settled; onset = first 1 ms bin above 4× the noise floor, timed from the
+`kiban_audio_write()` call. The microphone signal is on **slot 0 only** (slot 1 is always 0).
+
+| TX/RX DMA ring | Onset after write call (5 runs) |
+|---|---|
+| 6 × 240 frames (IDF default, 90 ms) | 62.4 – 96.4 ms (first session: 55.6 – 73.5 ms) — position in the ring varies |
+| 4 × 64 frames (16 ms) | 57.5, 59.6, 57.6, 57.6, 59.6 ms |
+| 3 × 32 frames (6 ms) | 58.6, 57.7, 57.7, 57.7, 59.7 ms |
+
+So the loop (module output path + speaker → microphone + module input path) adds a **fixed ~58 ms, stable to about
+±1 ms**; output latency alone is at most that. With the default DMA ring the latency is larger and varies by tens of
+ms. `kiban_audio_set_dma()` selects the ring; products needing accurate starts should use a small ring (e.g. 4 × 64)
+and keep the ring fed (underrun behaviour with a real decoder is not yet measured) `[inference]`.
