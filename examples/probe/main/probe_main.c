@@ -72,6 +72,7 @@ void app_main(void)
     probe_register_storage_cmds();
     probe_register_audio_cmds();
     probe_register_power_cmds();
+    probe_register_wifi_cmds();
 
     ESP_ERROR_CHECK(esp_console_start_repl(repl));
 }
