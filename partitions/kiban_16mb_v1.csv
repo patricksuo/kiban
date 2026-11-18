@@ -1,0 +1,11 @@
+# kiban partition table v1 (16 MB). Same boundaries as the stock table; see docs/design/003.
+# Name,      Type, SubType,  Offset,   Size
+vendor_nvs,  data, 0xfe,     0x9000,   16K
+otadata,     data, ota,      0xd000,   8K
+phy_init,    data, phy,      0xf000,   4K
+nvs,         data, nvs,      0x10000,  448K
+ota_0,       app,  ota_0,    0x80000,  5M
+ota_1,       app,  ota_1,    0x580000, 5M
+reserved,    data, 0xfd,     0xa80000, 400K
+assets,      data, littlefs, 0xae4000, 5M
+coredump,    data, coredump, 0xfe4000, 64K
