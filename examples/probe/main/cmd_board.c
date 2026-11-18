@@ -86,7 +86,7 @@ static int cmd_keys(int argc, char **argv)
     int secs = argc > 1 ? atoi(argv[1]) : 10;
     if (secs <= 0 || secs > 120) secs = 10;
     const gpio_config_t in = {.pin_bit_mask = (1ULL << KIBAN_PIN_BOOT_KEY) | (1ULL << KIBAN_PIN_POWER_KEY),
-                              .mode = GPIO_MODE_INPUT, .pull_up_en = GPIO_PULLUP_DISABLE};
+                              .mode = GPIO_MODE_INPUT, .pull_up_en = GPIO_PULLUP_ENABLE}; // GPIO0 has no external pull-up
     gpio_config(&in);
     printf("watching BOOT(GPIO0) POWER(GPIO3) VOL-(P0.7) VOL+(P1.0) for %d s; raw levels, 1=high\n", secs);
     int last = -1;

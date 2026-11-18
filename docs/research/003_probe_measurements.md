@@ -21,6 +21,15 @@ label is not yet checked). Each entry is `[measured]` unless tagged otherwise. D
 - After board init: output latch `0xffed`, config `0xf58c` (= vendor boot configuration), inputs show VOL±
   released (high), P1.4 (accelerometer INT) high.
 
+## P1 · Keys
+
+| Key | Line | Measured |
+|---|---|---|
+| VOL+ | TCA9555 P1.0 | active low, clean press/release |
+| VOL− | TCA9555 P0.7 | active low, clean press/release |
+| POWER | GPIO3 | active low; reads high without an internal pull-up (external pull-up present) |
+| AI key (BOOT) | GPIO0 | **no external pull-up**: as a plain input without the internal pull-up it drifts to 0 within ~1 s. Firmware must enable the internal pull-up. This floating line is the likely cause of the "every reset enters download mode" observation below `[inference]` |
+
 ## Power and power-up behaviour
 
 - **Power-on needs a long press of POWER (~3 s).** A short press did not turn the device on.
