@@ -33,6 +33,19 @@ static void on_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     }
 }
 
+static const char *auth_name(wifi_auth_mode_t a)
+{
+    switch (a) {
+    case WIFI_AUTH_OPEN: return "open";
+    case WIFI_AUTH_WEP: return "wep";
+    case WIFI_AUTH_WPA_PSK: return "wpa";
+    case WIFI_AUTH_WPA2_PSK: return "wpa2";
+    case WIFI_AUTH_WPA_WPA2_PSK: return "wpa/wpa2";
+    case WIFI_AUTH_WPA3_PSK: return "wpa3";
+    case WIFI_AUTH_WPA2_WPA3_PSK: return "wpa2/wpa3";
+    default: return "other";
+    }
+
 static esp_err_t wifi_up(void)
 {
     if (s_up) return ESP_OK;
@@ -65,18 +78,6 @@ static void wifi_down(void)
     s_up = false;
 }
 
-static const char *auth_name(wifi_auth_mode_t a)
-{
-    switch (a) {
-    case WIFI_AUTH_OPEN: return "open";
-    case WIFI_AUTH_WEP: return "wep";
-    case WIFI_AUTH_WPA_PSK: return "wpa";
-    case WIFI_AUTH_WPA2_PSK: return "wpa2";
-    case WIFI_AUTH_WPA_WPA2_PSK: return "wpa/wpa2";
-    case WIFI_AUTH_WPA3_PSK: return "wpa3";
-    case WIFI_AUTH_WPA2_WPA3_PSK: return "wpa2/wpa3";
-    default: return "other";
-    }
 }
 
 // wifi join <ssid> <password>: credentials live in RAM only (WIFI_STORAGE_RAM, no NVS); never printed.
@@ -84,25 +85,43 @@ static int wifi_join(const char *ssid, const char *pass)
 {
     esp_err_t err = wifi_up();
     if (err != ESP_OK) { printf("wifi init: %s\n", esp_err_to_name(err)); return 1; }
+    // Look for the target first (the SSID is the user's input; it is printed only here, locally).
+    wifi_scan_config_t sc = {.ssid = (uint8_t *)ssid};
+    uint16_t n = 8;
+    wifi_ap_record_t rec[8];
+    if (esp_wifi_scan_start(&sc, true) == ESP_OK && esp_wifi_scan_get_ap_records(&n, rec) == ESP_OK) {
+        printf("target scan: %u match(es)\n", n);
+        for (int i = 0; i < n; i++)
+            printf("  ch%u %d dBm %s%s\n", rec[i].primary, rec[i].rssi, auth_name(rec[i].authmode),
+                   rec[i].phy_11n ? " 11n" : "");
+    }
     wifi_config_t wc = {0};
     strlcpy((char *)wc.sta.ssid, ssid, sizeof wc.sta.ssid);
     strlcpy((char *)wc.sta.password, pass, sizeof wc.sta.password);
     wc.sta.threshold.authmode = WIFI_AUTH_OPEN;
+    wc.sta.pmf_cfg.capable = true;
+    wc.sta.sae_pwe_h2e = WPA3_SAE_PWE_BOTH;
+    wc.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    wc.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
     esp_wifi_set_config(WIFI_IF_STA, &wc);
     memset(&wc, 0, sizeof wc);
-    xEventGroupClearBits(s_ev, EV_GOT_IP | EV_FAIL);
     const int64_t t0 = esp_timer_get_time();
-    esp_wifi_connect();
-    const EventBits_t b = xEventGroupWaitBits(s_ev, EV_GOT_IP | EV_FAIL, pdFALSE, pdFALSE, pdMS_TO_TICKS(20000));
-    const long long ms = (esp_timer_get_time() - t0) / 1000;
-    if (!(b & EV_GOT_IP)) { printf("join: failed after %lld ms\n", ms); return 1; }
-    wifi_ap_record_t ap;
-    esp_netif_ip_info_t ip;
-    esp_wifi_sta_get_ap_info(&ap);
-    esp_netif_get_ip_info(esp_netif_get_handle_from_ifkey("WIFI_STA_DEF"), &ip);
-    printf("join: got IP in %lld ms; channel %u, RSSI %d dBm, phy %s%s%s\n", ms, ap.primary, ap.rssi,
-           ap.phy_11b ? "b" : "", ap.phy_11g ? "g" : "", ap.phy_11n ? "n" : "");
-    return 0;
+    for (int attempt = 1; attempt <= 5; attempt++) {
+        xEventGroupClearBits(s_ev, EV_GOT_IP | EV_FAIL);
+        esp_wifi_connect();
+        const EventBits_t b = xEventGroupWaitBits(s_ev, EV_GOT_IP | EV_FAIL, pdFALSE, pdFALSE, pdMS_TO_TICKS(15000));
+        if (b & EV_GOT_IP) {
+            wifi_ap_record_t ap;
+            esp_wifi_sta_get_ap_info(&ap);
+            printf("join: got IP on attempt %d after %lld ms; channel %u, RSSI %d dBm\n", attempt,
+                   (long long)((esp_timer_get_time() - t0) / 1000), ap.primary, ap.rssi);
+            return 0;
+        }
+        printf("attempt %d failed\n", attempt);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+    printf("join: failed after %lld ms\n", (long long)((esp_timer_get_time() - t0) / 1000));
+    return 1;
 }
 
 // wifi get <url>: download and report throughput (body discarded).
