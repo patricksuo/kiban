@@ -21,6 +21,7 @@
 // Survive the chip reset that opening the port causes on macOS.
 typedef struct { uint32_t magic; int cause; int64_t asked_ms, slept_ms; } light_rec_t;
 static RTC_NOINIT_ATTR light_rec_t s_light;
+static RTC_NOINIT_ATTR light_rec_t s_deep;   // filled at the boot that follows a deep-sleep wake
 static RTC_DATA_ATTR int64_t s_deep_start_us;
 static RTC_DATA_ATTR uint32_t s_deep_asked_ms;
 #define MAGIC 0x6b696261
@@ -44,8 +45,11 @@ void probe_report_wake(void)
         if (m & (1u << i)) { c = i; break; }
     printf("boot: reset reason %d, wake causes 0x%lx (%s)\n", (int)esp_reset_reason(), (unsigned long)m, cause_name(c));
     if (esp_reset_reason() == ESP_RST_DEEPSLEEP)
-        printf("deep sleep: asked %lu ms, slept %lld ms\n", (unsigned long)s_deep_asked_ms,
-               (long long)((esp_rtc_get_time_us() - s_deep_start_us) / 1000));
+        s_deep = (light_rec_t){.magic = MAGIC, .cause = c, .asked_ms = s_deep_asked_ms,
+                               .slept_ms = (esp_rtc_get_time_us() - s_deep_start_us) / 1000};
+    if (s_deep.magic == MAGIC)
+        printf("last deep sleep: asked %lld ms, slept %lld ms, cause %s\n", (long long)s_deep.asked_ms,
+               (long long)s_deep.slept_ms, cause_name(s_deep.cause));
     if (s_light.magic == MAGIC)
         printf("last light sleep: asked %lld ms, slept %lld ms, cause %s\n", (long long)s_light.asked_ms,
                (long long)s_light.slept_ms, cause_name(s_light.cause));

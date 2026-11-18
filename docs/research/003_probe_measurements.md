@@ -222,3 +222,12 @@ Read-only probing only (no `=` commands). The module answers `AT ERROR` (~120 ms
 `AT+HELP`, `AT+MODE?`, `AT+RX?`, `AT+NAME?`, `AT+ADDR?`, `AT+GMR`, and nothing to a bare `AT`. Model and firmware
 version cannot be read over UART; the only known command set is the vendor's (`AT+RX=`, `AT+TX=`, `AT+MODE=`,
 `AT+INQUIRING`, `AT+CONNECT=`, `AT+PP=`, `AT+BTSCO=`). Identifying the chip needs the board marking or the vendor.
+
+## P7 · Sleep and wake (part 1, no user action)
+
+| Item | Result |
+|---|---|
+| Light sleep, timer 3000 ms | Woke by timer after 2991 ms. USB-Serial/JTAG drops during light sleep (output printed right after wake is lost) |
+| Deep sleep, timer 5000 ms | Woke by timer; 5664 ms measured from sleep entry to the probe's report (includes ~0.66 s of boot). TCA9555 state retained across deep sleep |
+| PCF8563 countdown interrupt (TIE, 5 s) | No lasting change on GPIO1 (touch INT), GPIO2 (expander INT), GPIO3 (POWER) or any TCA9555 input when the timer expired. The RTC INT line is not routed to these; whether it reaches the power-switch chip (power-on alarm) is open `[to-verify]` |
+| TCA9555 P1.2 (unmapped in vendor code) | Toggles irregularly (bursts of ~20–100 ms, roughly every second) independent of the RTC timer; each change pulses the expander INT (GPIO2). Source unknown `[to-verify]` |
