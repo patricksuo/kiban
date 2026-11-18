@@ -37,6 +37,9 @@ esp_err_t kiban_audio_at(const char *cmd, uint32_t wait_ms);
 esp_err_t kiban_audio_write(const int16_t *pcm, size_t frames, int volume, uint32_t timeout_ms, size_t *written);
 uint64_t kiban_audio_frames_written(void);
 
+// Read raw input frames (two 32-bit slots per frame, as delivered by the module). Bounded wait.
+esp_err_t kiban_audio_read(int32_t *stereo, size_t frames, uint32_t timeout_ms, size_t *got);
+
 esp_err_t kiban_audio_amp(bool on);    // P0.1 = 0 (ESP path) then P0.4
 
 #ifdef __cplusplus

@@ -21,7 +21,7 @@ static const char *TAG = "kiban.audio";
 #define UART_PORT UART_NUM_2
 #define CHUNK_FRAMES 256
 
-static i2s_chan_handle_t s_tx;
+static i2s_chan_handle_t s_tx, s_rx;
 static bool s_uart;
 static kiban_audio_line_cb_t s_cb;
 static void *s_ctx;
@@ -95,19 +95,21 @@ esp_err_t kiban_audio_open(uint32_t wait_ms, kiban_audio_line_cb_t cb, void *ctx
     if (!s_tx) {
         i2s_chan_config_t chan = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_SLAVE);
         chan.auto_clear_after_cb = true;
-        ESP_RETURN_ON_ERROR(i2s_new_channel(&chan, &s_tx, NULL), TAG, "i2s channel");
+        ESP_RETURN_ON_ERROR(i2s_new_channel(&chan, &s_tx, &s_rx), TAG, "i2s channel");   // duplex, as the vendor
         i2s_std_config_t std = {
             .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(KIBAN_AUDIO_RATE_HZ),
             .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_32BIT, I2S_SLOT_MODE_STEREO),
             .gpio_cfg = {.mclk = I2S_GPIO_UNUSED, .bclk = KIBAN_AUDIO_PIN_BCLK, .ws = KIBAN_AUDIO_PIN_WS,
-                         .dout = KIBAN_AUDIO_PIN_DOUT, .din = I2S_GPIO_UNUSED},
+                         .dout = KIBAN_AUDIO_PIN_DOUT, .din = KIBAN_AUDIO_PIN_DIN},
         };
         // Match the vendor slot layout: 32-bit WS width, left aligned, MSB first.
         std.slot_cfg.ws_width = I2S_DATA_BIT_WIDTH_32BIT;
         std.slot_cfg.bit_shift = true;
         std.slot_cfg.left_align = true;
-        ESP_RETURN_ON_ERROR(i2s_channel_init_std_mode(s_tx, &std), TAG, "i2s std");
-        ESP_RETURN_ON_ERROR(i2s_channel_enable(s_tx), TAG, "i2s enable");
+        ESP_RETURN_ON_ERROR(i2s_channel_init_std_mode(s_tx, &std), TAG, "i2s std tx");
+        ESP_RETURN_ON_ERROR(i2s_channel_init_std_mode(s_rx, &std), TAG, "i2s std rx");
+        ESP_RETURN_ON_ERROR(i2s_channel_enable(s_tx), TAG, "i2s enable tx");
+        ESP_RETURN_ON_ERROR(i2s_channel_enable(s_rx), TAG, "i2s enable rx");
     }
     if (!s_buf) {
         s_buf = heap_caps_malloc(CHUNK_FRAMES * 2 * sizeof(int32_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
@@ -155,6 +157,11 @@ uint64_t kiban_audio_frames_written(void) { return s_frames; }
 esp_err_t kiban_audio_close(void)
 {
     kiban_audio_amp(false);
+    if (s_rx) {
+        i2s_channel_disable(s_rx);
+        i2s_del_channel(s_rx);
+        s_rx = NULL;
+    }
     if (s_tx) {
         i2s_channel_disable(s_tx);
         i2s_del_channel(s_tx);
@@ -167,4 +174,13 @@ esp_err_t kiban_audio_close(void)
     free(s_buf);
     s_buf = NULL;
     return ESP_OK;
+}
+
+esp_err_t kiban_audio_read(int32_t *stereo, size_t frames, uint32_t timeout_ms, size_t *got)
+{
+    ESP_RETURN_ON_FALSE(s_rx, ESP_ERR_INVALID_STATE, TAG, "not open");
+    size_t bytes = 0;
+    esp_err_t err = i2s_channel_read(s_rx, stereo, frames * 2 * sizeof(int32_t), &bytes, timeout_ms);
+    if (got) *got = bytes / (2 * sizeof(int32_t));
+    return err;
 }
