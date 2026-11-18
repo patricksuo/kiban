@@ -1,0 +1,18 @@
+menu "kiban"
+
+    config KIBAN_EPD_BUSY_TIMEOUT_MS
+        int "E-paper BUSY wait timeout (ms) when the caller passes 0"
+        range 100 60000
+        default 5000
+        help
+            Upper bound for every SSD1677 BUSY wait. A refresh that exceeds it returns
+            ESP_ERR_TIMEOUT and the driver must be initialised again.
+
+    config KIBAN_EPD_SPI_HZ
+        int "E-paper SPI clock (Hz)"
+        range 1000000 20000000
+        default 10000000
+        help
+            The vendor firmware runs the panel at 10 MHz.
+
+endmenu
