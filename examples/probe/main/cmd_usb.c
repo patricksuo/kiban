@@ -43,7 +43,7 @@ static int drive_start(int secs)
     if (err != ESP_OK) { printf("keys init: %s\n", esp_err_to_name(err)); return 1; }
 
     printf("USB drive mode for %d s. The console disappears now (the USB PHY switches to OTG).\n"
-           "Eject the drive on the host before it ends. It ends after %d s or on a POWER key press,\n"
+           "Eject the drive on the host before it ends. It ends on host eject, after %d s or on a POWER key press,\n"
            "then the console comes back (reconnect the serial monitor).\n", secs, secs);
     fflush(stdout);
     vTaskDelay(pdMS_TO_TICKS(200));   // let the text reach the host before the PHY switches
@@ -66,6 +66,7 @@ static int drive_start(int secs)
             if (ev[i].key == KIBAN_KEY_POWER && ev[i].action == KIBAN_KEY_PRESS) power = true;
         if (power) { s_last.ended_by = "POWER key"; break; }
         if (kiban_usb_host_mounted()) s_last.host_seen = true;
+        if (kiban_usb_host_ejected()) { s_last.ended_by = "host eject"; break; }
         vTaskDelay(pdMS_TO_TICKS(15));
     }
     s_last.active_ms = (esp_timer_get_time() - t0) / 1000;

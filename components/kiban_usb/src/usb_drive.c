@@ -39,6 +39,7 @@ static const char *TAG = "kiban.usb";
 static bool s_active;
 static bool s_broken;                 // teardown failed: refuse to start until reboot
 static volatile bool s_host_mounted;  // written by the TinyUSB task
+static volatile bool s_host_ejected;  // host sent SCSI START STOP UNIT with eject (written by the TinyUSB task)
 static usb_phy_handle_t s_phy;
 static tinyusb_msc_storage_handle_t s_storage;
 static char s_remount[16];            // mount point to restore on stop ("" = was not mounted)
@@ -98,14 +99,20 @@ static void usb_event_cb(tinyusb_event_t *event, void *arg)
     else if (event->id == TINYUSB_EVENT_DETACHED) s_host_mounted = false;
 }
 
-// Replaces esp_tinyusb's default callback, which logs a warning per event. With auto_mount_off and the
-// storage owned by the USB host there are no mount events to act on.
+// On a host eject (SCSI START STOP UNIT, LoEj=1, Start=0) esp_tinyusb takes the medium back for the app
+// (mount_point APP), so TEST UNIT READY reports "medium not present" and the host does not remount it.
+// Without that (auto_mount_off) the unit stays ready and macOS remounts the volume right after an eject,
+// which looks like Finder's eject doing nothing [measured]. The app-side FAT mount is private to this
+// component, never formats (do_not_format), and is dropped when the storage is deleted on stop.
+// MOUNT_COMPLETE / FORMAT_REQUIRED / MOUNT_FAILED after start all mean: the host let go of the medium.
 static void msc_event_cb(tinyusb_msc_storage_handle_t handle, tinyusb_msc_event_t *event, void *arg)
 {
     (void)handle;
     (void)arg;
-    if (event->id == TINYUSB_MSC_EVENT_MOUNT_FAILED || event->id == TINYUSB_MSC_EVENT_FORMAT_REQUIRED)
-        ESP_LOGW(TAG, "msc event %d", (int)event->id);
+    if (event->id == TINYUSB_MSC_EVENT_MOUNT_COMPLETE || event->id == TINYUSB_MSC_EVENT_FORMAT_REQUIRED ||
+        event->id == TINYUSB_MSC_EVENT_MOUNT_FAILED)
+        s_host_ejected = true;
+    if (event->id != TINYUSB_MSC_EVENT_MOUNT_COMPLETE) ESP_LOGW(TAG, "msc event %d", (int)event->id);
 }
 
 // Restore the SD card to its state before start. Returns the remount result. Not after a failed MSC
@@ -162,7 +169,7 @@ esp_err_t kiban_usb_drive_start(void)
     }
 
     const tinyusb_msc_driver_config_t drv = {
-        .user_flags.auto_mount_off = 1,   // never let esp_tinyusb mount (or format) the card for the app
+        .user_flags.auto_mount_off = 0,   // needed for host eject (see msc_event_cb); never formats
         .callback = msc_event_cb,
     };
     err = tinyusb_msc_install_driver(&drv);
@@ -174,7 +181,7 @@ esp_err_t kiban_usb_drive_start(void)
     tinyusb_msc_storage_config_t st = {
         .medium.card = card,
         .mount_point = TINYUSB_MSC_STORAGE_MOUNT_USB,
-        .fat_fs = {.do_not_format = true, .config = {.format_if_mount_failed = false, .max_files = 1}},
+        .fat_fs = {.base_path = "/kiban_usb", .do_not_format = true, .config = {.format_if_mount_failed = false, .max_files = 1}},
     };
     err = tinyusb_msc_new_storage_sdmmc(&st, &s_storage);
     if (err != ESP_OK) {
@@ -210,6 +217,7 @@ esp_err_t kiban_usb_drive_start(void)
     cfg.descriptor.string = s_strings;
     cfg.descriptor.string_count = sizeof s_strings / sizeof s_strings[0];
     s_host_mounted = false;
+    s_host_ejected = false;
     err = tinyusb_driver_install(&cfg);
     if (err != ESP_OK) {
         usb_del_phy(s_phy);
@@ -249,6 +257,7 @@ esp_err_t kiban_usb_drive_stop(void)
     vTaskDelay(pdMS_TO_TICKS(PHY_SETTLE_MS));
     s_active = false;
     s_host_mounted = false;
+    s_host_ejected = false;
 
     if (s_broken) {
         // The TinyUSB task may still hold the card: leave it exported-but-detached rather than remount.
@@ -263,3 +272,5 @@ esp_err_t kiban_usb_drive_stop(void)
 bool kiban_usb_drive_active(void) { return s_active; }
 
 bool kiban_usb_host_mounted(void) { return s_active && s_host_mounted; }
+
+bool kiban_usb_host_ejected(void) { return s_active && s_host_ejected; }

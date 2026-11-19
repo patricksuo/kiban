@@ -35,9 +35,13 @@ esp_err_t kiban_usb_drive_stop(void);
 
 bool kiban_usb_drive_active(void);
 
-// The host has configured the device (enumerated it and selected the configuration). An eject on the
-// host side is not reported: the SCSI eject callback belongs to esp_tinyusb.
+// The host has configured the device (enumerated it and selected the configuration).
 bool kiban_usb_host_mounted(void);
+
+// The host ejected the drive (Finder eject / `diskutil eject`): its writes are flushed and the medium now
+// reports "not present". The product should then call kiban_usb_drive_stop(). A host that only unmounts
+// (`diskutil unmount`) or a pulled cable does not set this.
+bool kiban_usb_host_ejected(void);
 
 #ifdef __cplusplus
 }

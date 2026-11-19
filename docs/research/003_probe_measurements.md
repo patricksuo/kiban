@@ -404,7 +404,10 @@ with a 30-min timer; at each wake one gauge sample goes to the product NVS (~1 s
 - Files copied in Finder (an EPUB of 217,749 B and one of 6,769,037 B) are on the card afterwards, with their
   Japanese/Chinese long names, as seen by the device's FatFs (`sd ls`). macOS also writes `._*` AppleDouble files.
 - The timeout ends drive mode and the console returns; the card mounts on the device afterwards. A POWER press ends it too.
-- Finder's eject button did not respond once; `diskutil unmount` of the device node worked. Not yet explained.
+- Finder's eject "did nothing": the eject succeeded but macOS remounted the volume at once, because with `auto_mount_off`
+  esp_tinyusb ignores SCSI START STOP UNIT (eject) and TEST UNIT READY keeps answering "ready". Fixed: esp_tinyusb now
+  takes the medium back on eject (private app mount at `/kiban_usb`, never formats), the unit reports "medium not
+  present", `kiban_usb_host_ejected()` turns true and the probe ends drive mode; `diskutil eject` → volume gone, console
+  back within 1 s.
 - Product consequence: drive mode must not end on a timer while the host has the volume mounted (unflushed host writes
-  would be lost); end on host eject or an explicit user action. To do: detect the host's eject (SCSI START STOP UNIT /
-  medium removal) in `kiban_usb`; measure throughput; ignore `._*` files in the library scan.
+  would be lost); end on host eject or an explicit user action. To do: measure throughput; ignore `._*` files in the library scan.
