@@ -395,3 +395,16 @@ with a 30-min timer; at each wake one gauge sample goes to the product NVS (~1 s
   4161 mV. Default `sleep_ma` is now 11.5 mA for "deep sleep with rails on".
 - Not yet known: which consumer draws it (panel/SD rail, BT audio module, expander/pull-ups, charger, gauge, ESP32-S3
   deep sleep itself ~10 µA nominal), and the draw when powered off with an RTC wake (`power_off_for`).
+
+## U1 · USB drive mode (first run)
+
+`[measured]` 2026-11-19, probe `usb drive start <s>`, macOS host.
+- Enumerates as VID 0x303A / PID 0x4002 "kiban / E-Ink 4 SD card", USB full speed (12 Mbit/s); macOS mounts the card
+  as a writable FAT32 volume (16 GB card).
+- Files copied in Finder (an EPUB of 217,749 B and one of 6,769,037 B) are on the card afterwards, with their
+  Japanese/Chinese long names, as seen by the device's FatFs (`sd ls`). macOS also writes `._*` AppleDouble files.
+- The timeout ends drive mode and the console returns; the card mounts on the device afterwards. A POWER press ends it too.
+- Finder's eject button did not respond once; `diskutil unmount` of the device node worked. Not yet explained.
+- Product consequence: drive mode must not end on a timer while the host has the volume mounted (unflushed host writes
+  would be lost); end on host eject or an explicit user action. To do: detect the host's eject (SCSI START STOP UNIT /
+  medium removal) in `kiban_usb`; measure throughput; ignore `._*` files in the library scan.
