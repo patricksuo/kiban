@@ -374,3 +374,24 @@ On this unit `AT+TX=1` is echoed, but `AT+MODE=2` and `AT+INQUIRING` get **no re
 with gaps of 0.8 s, 2 s and 5 s; mode-1 commands keep working in the same session. Whether the module supports mode 2
 at all is unknown (vendor asked about the module model / AT documentation in issue #4). Not needed by either product
 for now; skipped (user, 2026-11-18). Possible diagnostic later: restore the stock firmware and try its Bluetooth page.
+
+## Deep-sleep current (overnight log, battery only)
+
+Probe `sleeplog start 30 20`: `kiban_power_prepare()` (audio closed, panel asleep, SD unmounted, motor off) then deep sleep
+with a 30-min timer; at each wake one gauge sample goes to the product NVS (~1 s awake). Rails stay as the board left them
+(main rail P0.6 and panel/SD rail P0.5 on). Started 4260 mV after charging, 25 °C → 20 °C room. `[measured]` 2026-11-19.
+
+| Elapsed | Voltage | Gauge AverageCurrent | Gauge RemainingCapacity |
+|---|---|---|---|
+| 0 min | 4260 mV | −11 mA | 2947 mAh |
+| 239 min | 4211 mV | −13 mA | 2901 mAh |
+| 509 min | 4153 mV | −12 mA | 2849 mAh |
+
+- **Average deep-sleep draw ≈ 11.6 mA** (98 mAh coulomb-counted over 8.48 h; the 17 one-second wakes account for < 1 mAh).
+  The gauge's AverageCurrent agrees (−11…−13 mA every sample). Measured by the gauge's sense resistor, not by an ammeter.
+- The coulomb count is real charge even though the gauge's capacity scale is wrong (3000 mAh default). On a ~1000 mAh
+  cell this is ~1.2 %/h, i.e. **~3.5 days of standby**, far from an e-reader's weeks.
+- The earlier assumption of 3 mA (`battery_soc` gap model) was 4× too low; after this run kiban's estimate read 98 % at
+  4161 mV. Default `sleep_ma` is now 11.5 mA for "deep sleep with rails on".
+- Not yet known: which consumer draws it (panel/SD rail, BT audio module, expander/pull-ups, charger, gauge, ESP32-S3
+  deep sleep itself ~10 µA nominal), and the draw when powered off with an RTC wake (`power_off_for`).

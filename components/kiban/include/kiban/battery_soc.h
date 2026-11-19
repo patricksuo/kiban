@@ -23,7 +23,7 @@ typedef struct {
     // configuration
     float capacity_mah;     // > 0
     int64_t max_gap_us;     // samples further apart are a gap (default 120 s)
-    float sleep_ma;         // assumed average draw during a gap (default 3 mA [inference], to be measured)
+    float sleep_ma;         // average draw during a gap (default 11.5 mA: deep sleep with rails on, measured research/003)
     // state
     double soc_pct;         // estimate 0..100
     bool valid;

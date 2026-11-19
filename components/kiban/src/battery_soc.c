@@ -38,7 +38,7 @@ void kiban_soc_init(kiban_soc_t *s, float capacity_mah)
     *s = (kiban_soc_t){
         .capacity_mah = capacity_mah > 0 ? capacity_mah : KIBAN_BATTERY_CAPACITY_MAH,
         .max_gap_us = 120LL * 1000000,
-        .sleep_ma = 3.0f,
+        .sleep_ma = 11.5f,
         .rest_since_us = -1,
         .pending_gap_s = -2,   // -2: none declared
     };

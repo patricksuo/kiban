@@ -3,6 +3,8 @@
 //      components/kiban/src/battery_soc.c -lm -o /tmp/test_soc && /tmp/test_soc
 #include <math.h>
 #include <stdio.h>
+
+#define SLEEP8H (11.5 * 8 / 1000.0 * 100)   // default sleep_ma over 8 h on the default 1000 mAh, in %
 #include <stdlib.h>
 
 #include "kiban/battery_soc.h"
@@ -77,14 +79,14 @@ int main(void)
     { kiban_soc_sample_t c = smp(4190, -6, 1); c.terminated = true; kiban_soc_update(&s, &c); }
     CHECK(s.soc_pct < 100);
 
-    // Declared gap: 8 h asleep at 3 mA = -2.4 %, then a 0.5 blend towards OCV (resting current at wake).
+    // Declared gap: 8 h asleep at sleep_ma (11.5 mA on 1000 mAh = -9.2 %), then a 0.5 blend towards OCV (resting current at wake).
     fresh(&s, 85);
     { kiban_soc_sample_t c = smp(4020, -5, 10); kiban_soc_update(&s, &c); }
     kiban_soc_resume(&s, 8 * 3600);
     { kiban_soc_sample_t c = smp(4020, -5, 12); kiban_soc_update(&s, &c); }   // dt only 2 s (reboot case)
     {
         const double ocv = kiban_soc_from_ocv(4020 + 5 * 0.15f);
-        NEAR(s.soc_pct, (85 - 2.4) + (ocv - (85 - 2.4)) * 0.5, 0.3);
+        NEAR(s.soc_pct, (85 - SLEEP8H) + (ocv - (85 - SLEEP8H)) * 0.5, 0.3);
     }
     // Undeclared gap (dt > max_gap): gap = dt, waking current large -> weight 0.2.
     fresh(&s, 85);
@@ -92,7 +94,7 @@ int main(void)
     { kiban_soc_sample_t c = smp(3990, -45, 10 + 8 * 3600); kiban_soc_update(&s, &c); }
     {
         const double ocv = kiban_soc_from_ocv(3990 + 45 * 0.15f);
-        NEAR(s.soc_pct, (85 - 2.4) + (ocv - (85 - 2.4)) * 0.2, 0.3);
+        NEAR(s.soc_pct, (85 - SLEEP8H) + (ocv - (85 - SLEEP8H)) * 0.2, 0.3);
         CHECK(s.soc_pct > 75);   // not -36 % as with naive integration
     }
     // Time going backwards (reboot without resume) is a gap of unknown length: no sleep subtraction.
