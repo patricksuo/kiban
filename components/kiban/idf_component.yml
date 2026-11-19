@@ -1,4 +1,4 @@
-version: "0.2.0"
+version: "0.3.0"
 description: Board SDK for the Metalio E-Ink 4 (ESP32-S3, SSD1677, CST816S). Pure C.
 url: https://github.com/patricksuo/kiban
 license: MIT
