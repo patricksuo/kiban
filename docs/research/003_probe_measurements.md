@@ -411,3 +411,15 @@ with a 30-min timer; at each wake one gauge sample goes to the product NVS (~1 s
   back within 1 s.
 - Product consequence: drive mode must not end on a timer while the host has the volume mounted (unflushed host writes
   would be lost); end on host eject or an explicit user action. To do: measure throughput; ignore `._*` files in the library scan.
+
+## FULL_OTP mixed with PARTIAL (found by bunko's UI)
+
+`[measured]` 2026-11-19, bunko UI skeleton (menus over a list, partial refreshes between full refreshes).
+- `FULL_OTP` (0xF7) at boot, then `PARTIAL`: the partial left old text visible (black → white not driven) and drew new
+  text faint gray. Photographed by the user.
+- `PARTIAL` …, then `FULL_OTP`: BUSY **568 ms** instead of ~1020 ms, i.e. 0xF7 did not load the OTP waveform once an
+  MCU LUT had been written; the "full" refresh ran the partial waveform.
+- With `FULL` (MCU waveform, 0xC7) instead: BUSY 1016–1025 ms every time, also after partials; partials before and after
+  it clean (user's eyes; 16 partials and 3 fulls in a 30 s session).
+- Rule until understood: **do not mix `FULL_OTP` with `PARTIAL`**; products that use partial refreshes use `FULL`.
+  The P2 checks above that looked clean ran these modes in a different order.

@@ -70,6 +70,8 @@ esp_err_t kiban_epd_deinit(void);
 // Shows a 1bpp frame (caller-owned, any memory, KIBAN_EPD_FB_BYTES long) and blocks until the
 // refresh completes. timeout_ms bounds every BUSY wait; 0 selects CONFIG_KIBAN_EPD_BUSY_TIMEOUT_MS.
 // On ESP_ERR_TIMEOUT the driver needs kiban_epd_init() again; the rail is left as it is.
+// Do not mix KIBAN_EPD_MODE_FULL_OTP with PARTIAL: after an MCU LUT is loaded 0xF7 does not reload the OTP
+// waveform, and a PARTIAL after FULL_OTP leaves old pixels [measured] research/003. Use FULL with PARTIAL.
 esp_err_t kiban_epd_show(const uint8_t *fb, kiban_epd_mode_t mode, uint32_t timeout_ms);
 
 // Shows a 2bpp 4-level frame (KIBAN_EPD_FB2_BYTES) using the vendor overlay path: a FULL refresh
