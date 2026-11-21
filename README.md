@@ -14,7 +14,9 @@ Scope:
 
 Out of scope: layout, fonts, UI, content formats, playback logic — those belong to products.
 
-Status: early. Hardware research: `docs/research/001` (vendor firmware), `002` (FreeInk SDK and stack choice).
+Status: early. Hardware research: `docs/research/001` (vendor firmware), `002` (FreeInk SDK and stack choice),
+`003` (probe measurements), `004` (performance baseline: CPU, memory hierarchy, allocator, code placement, SD;
+tool `examples/bench`).
 
 Board logic ported from the vendor firmware ([CloudZao/Metalio-E-INK4](https://github.com/CloudZao/Metalio-E-INK4))
 and [FreeInk SDK](https://github.com/Free-Ink/freeink-sdk), both MIT; attribution is kept in the ported files.

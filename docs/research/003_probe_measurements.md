@@ -9,7 +9,7 @@ label is not yet checked). Each entry is `[measured]` unless tagged otherwise. D
 |---|---|
 | Stock bootloader (ESP-IDF 5.5.x) boots an ESP-IDF **v6.0.2** app from `ota_0` @ `0x80000` | Yes. Only `0x80000` was written; bootloader, partition table, otadata, NVS untouched |
 | PSRAM | 8 MB octal, memory test OK |
-| Flash | 16 MB, chip reported as "boya", bootloader runs it in DIO |
+| Flash | 16 MB, chip reported as "boya"; the boot log says DIO (image header), but SPI0 (cache) reads run in QIO at app time (`research/004` §1) |
 | Console | USB-Serial/JTAG works |
 | Reset reason after a cold power-on | 11 (`ESP_RST_USB`) |
 
