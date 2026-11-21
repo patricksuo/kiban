@@ -20,7 +20,10 @@ Run on one board, 2026-11-21.
   direct `call8` in `examples/bench`. Expect `call_direct` to differ slightly.
 - The host driver built from this tree reproduces the checksums (`chk=`) of the host run used below for every
   kernel line except `chase` (its checksum is a node address) `[measured]`.
-- **A run of the `examples/bench` binary itself on the device is `[to-verify]`.**
+- A run of the `examples/bench` binary itself (at b207a3c, `mount 40000` then `bench`) gives the same median cycles
+  within 5 % on all 92 kernel lines the two runs share, except `call_direct` (16.0 → 13.0 cycles, the direct
+  `call8` above) and `call_256ops` (warm 3.82 → 3.04, after thrash 4.68 → 4.33); all suites `bad=0`, 21.1 s in all
+  `[measured]`.
 
 ## 1. Platform facts the benchmark depends on
 
