@@ -13,7 +13,8 @@ Run on one board, 2026-11-21.
   random-read file taken from `file=` instead of picked on the card). That app used the kiban 0.3.0 components for
   board bring-up and the SD mount. The generated `sdkconfig` of `examples/bench`
   equals that app's except for the partition-table path (diff of the two files) `[measured]`.
-- Code generation `[source]` (`xtensa-esp32s3-elf-nm -S` / `objdump -d` of both images): every portable kernel and
+- Code generation `[source]` (`xtensa-esp32s3-elf-nm -S` / `objdump -d` of both images; the measured image's ELF is
+  identified by the SHA-256 prefix in its boot log): every portable kernel and
   the three `code` functions have the same size in both builds, with one exception: `k_call` (the `call_direct`
   line) reached its leaf by `l32r` + `callx8` in the measured image (the leaf was out of `call8` range) and by a
   direct `call8` in `examples/bench`. Expect `call_direct` to differ slightly.
@@ -142,6 +143,7 @@ On the console:
 mount 40000                       # the card at 40 MHz (boot mounts at 20 MHz)
 bench                             # every suite (= bench all); or e.g. bench cpu chase, bench mem reps=15
 bench sd file=/sd/some/large.file # adds random reads / opens on an existing file, read-only
+bench sd "file=/sd/dir/A Book.epub"   # a path with spaces: quote the whole argument (or escape each space: \ )
 ```
 
 Capture the console to a file and turn it into tables (paths relative to `examples/bench`):
@@ -268,7 +270,7 @@ failures.
 ## 5. Interpretation `[inference]`
 
 - **PSRAM miss ≈ 123 cycles (512 ns) per 32 B line** once the working set exceeds the 32 KB data cache (knee between
-  32 KB and 48 KB; at 48 KB only ≈ 12 % of the hops still hit, not the 2/3 an ideal LRU would keep). Below it, PSRAM through the cache is as fast as
+  32 KB and 48 KB; at 48 KB only ≈ 12 % of the hops still hit). Below it, PSRAM through the cache is as fast as
   internal SRAM (2 cycles per dependent load). A dirty eviction adds ≈ 96 cycles (`chase_rmw` 219). Walking lines in
   address order costs the same as random: no prefetch helps a dependent walk. Streaming bandwidth is that latency
   per line: 32 B / 123 cycles = 62 MB/s against 58 MB/s measured read; write-allocate + write-back gives 32 B / 219
@@ -287,7 +289,8 @@ failures.
   divide (59 cycles, 74×) and 64-bit divide (139, 155×), against 7–15× for plain integer work.
 - **Calls**: a call of a leaf costs ≈ 10 cycles over inline; the cost per level of a recursion rises from 15–17
   cycles (depth ≤ 4) to 22–42 (depth 8–32), consistent with register-window spills past ~8 levels.
-- **Branches and short strings** are 60–120× the host: an in-order core without the host's prediction and wide issue.
+- **Branches and short string / memory compares** are 60–230× the host: an in-order core without the host's branch
+  prediction and wide issue.
 - **Allocator**: a malloc + free pair is ≈ 1,250–1,950 cycles (5–8 µs) in every class; batch malloc from PSRAM is
   cheaper than from internal RAM (≈ 800 vs ≈ 1,200 cycles); fragmentation barely changes it.
 - **SD** at 40 MHz 1-bit: sequential reads reach 4.84 MB/s from 32 KB blocks (the bus limit is 5 MB/s); 4 KB reads
