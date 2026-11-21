@@ -317,3 +317,35 @@ failures.
 - `alloc frag` and `sd cleanup` `ok` compare exact free-byte counts; a concurrent allocation on core 0 or FAT
   bookkeeping can make them report 0 without a leak.
 - SD figures depend on the card model and its state (erase blocks, cache, fragmentation, fill level).
+
+## 7. Cache size and a reader workload
+
+A reader application's "page made from a resume index" path (inflate an EPUB XHTML item, parse it with expat, cascade
+CSS per element, break lines) on this board, 240 MHz, `-O2`, the same commands per build; the builds differ only in
+sdkconfig, and every build's output equals the host's `[measured]`. Median ms per page:
+
+| Workload | 16 KB I / 32 KB D (IDF default) | 32 KB I / 64 KB D | 32 / 64 KB + hot code in IRAM |
+|---|---|---|---|
+| A: long Japanese chapters, small stylesheet | 383 | 199 | 189 |
+| B: technical book, 770-rule stylesheet | 409 | 215 | 200 |
+| C: Chinese novel, 421 short items | 54 | 43 | 38 |
+| D: Chinese novel, 1,527 short items | 49 | 36 | 31 |
+
+- The bigger caches (`CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB` with 8 ways and 32 B lines,
+  `CONFIG_ESP32S3_DATA_CACHE_64KB`) take 48 KB of internal heap: 16 KB I-cache, 32 KB D-cache
+  (`components/heap/port/esp32s3/memory_layout.c` `[source]`); internal free at idle 348 → 300 KB `[measured]`.
+- Placing the hot path's code in IRAM (≈ 144 KB) on top of them saves ≈ 5 % (A), 7 % (B) and 13 % (D, small pages)
+  `[measured]`; with the default caches IRAM placement alone gives about what the bigger caches give, for three
+  times the RAM.
+- The hot path's code (≈ 144 KB) is several times the 16 KB I-cache. With the default caches the median page of
+  workload A moved by ≈ 18 % between two builds of the application whose measured path had the same logic
+  `[measured]`; that the cause is code layout under I-cache misses (§5: ≈ 17× per missed op) is `[inference]`.
+
+Recommendation `[inference]`: a product with large parsing or layout code paths (XML, CSS, text shaping) should use
+32 KB I-cache and 64 KB D-cache, and keep IRAM placement for code that must run with the caches disabled or that
+still dominates after measuring with the bigger caches.
+
+## 8. Open items
+
+- **PIE** (the S3's 128-bit SIMD instructions, TRM ch. 1) `[source: TRM]`: no help for branchy parsing. Candidates
+  later: glyph blits, rotation, 2-bit → 1-bit conversion. No movemask; loads and stores need 16-byte alignment.
