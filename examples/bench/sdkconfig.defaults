@@ -1,0 +1,35 @@
+# kiban bench: the device performance baseline (docs/research/004). The settings below are the ones the published
+# numbers were measured with; changing any of them changes the numbers.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="../../partitions/kiban_16mb_v1.csv"
+# Console on the native USB-Serial/JTAG (the port esptool auto-resets through).
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+# Embedded 8 MB octal PSRAM; keep booting if the mode is wrong so the console survives.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_IGNORE_NOTFOUND=y
+# Chip is rev v0.2.
+CONFIG_ESP32S3_REV_MIN_0=y
+# Long, UTF-8 file names on the SD card (file= arguments).
+CONFIG_FATFS_LFN_HEAP=y
+CONFIG_FATFS_MAX_LFN=255
+CONFIG_FATFS_API_ENCODING_UTF_8=y
+CONFIG_FATFS_CODEPAGE_932=y
+# Never touch the stock NVS partition; no radio.
+CONFIG_ESP_WIFI_NVS_ENABLED=n
+CONFIG_ESP_PHY_CALIBRATION_AND_DATA_STORAGE=n
+CONFIG_BT_ENABLED=n
+# kiban_usb (kiban_usb_drive_stop at boot) needs the TinyUSB mass-storage class.
+CONFIG_TINYUSB_MSC_ENABLED=y
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+# ---- measurement settings ----
+# Fast seek compiled in: read-only VFS opens get a cluster link map (the sd suite's lseek O_RDONLY vs O_RDWR).
+CONFIG_FATFS_USE_FASTSEEK=y
+# FatFs sector buffers in internal RAM.
+CONFIG_FATFS_ALLOC_PREFER_EXTRAM=n
+# The clock and optimisation a release build would use (printed in every phase=env line).
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+CONFIG_COMPILER_OPTIMIZATION_PERF=y

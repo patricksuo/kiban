@@ -1,0 +1,6 @@
+dependencies:
+  idf: ">=6.0"
+  kiban:
+    path: ../../../components/kiban
+  kiban_usb:
+    path: ../../../components/kiban_usb
